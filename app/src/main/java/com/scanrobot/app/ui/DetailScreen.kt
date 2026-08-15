@@ -67,7 +67,7 @@ fun DetailScreen(
                 )
             }
         }
-        HorizontalDivider(thickness = 0.5.dp, color = BorderLight)
+        Divider(thickness = 0.5.dp, color = BorderLight)
 
         // Actions
         Row(

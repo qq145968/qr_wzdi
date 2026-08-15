@@ -113,7 +113,7 @@ private fun TabBar(active: String, onSwitch: (String) -> Unit) {
         Spacer(modifier = Modifier.width(40.dp))
         TabItem("管理", active == "manage") { onSwitch("manage") }
     }
-    HorizontalDivider(
+    Divider(
         modifier = Modifier.fillMaxWidth(),
         thickness = 0.5.dp,
         color = BorderLight
@@ -206,7 +206,7 @@ private fun SettingRowClick(label: String, value: String, onClick: () -> Unit) {
         }
     }
     if (label != "扫码提示音") {
-        HorizontalDivider(
+        Divider(
             modifier = Modifier.padding(horizontal = 16.dp),
             thickness = 0.5.dp,
             color = Color(0xFFF0F0F0)
@@ -231,7 +231,7 @@ private fun SettingRowToggle(label: String, isOn: Boolean, onToggle: () -> Unit)
         }
         ToggleSwitch(isOn, onToggle)
     }
-    HorizontalDivider(
+    Divider(
         modifier = Modifier.padding(horizontal = 16.dp),
         thickness = 0.5.dp,
         color = Color(0xFFF0F0F0)
@@ -484,7 +484,7 @@ private fun PickerSheet(
                     Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                     Text("确定", fontSize = 15.sp, color = BluePrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onDismiss() })
                 }
-                HorizontalDivider(thickness = 0.5.dp, color = BorderLight)
+                Divider(thickness = 0.5.dp, color = BorderLight)
                 options.forEach { (label, value) ->
                     Row(
                         modifier = Modifier
@@ -502,7 +502,7 @@ private fun PickerSheet(
                         }
                     }
                     if (label != options.last().first) {
-                        HorizontalDivider(
+                        Divider(
                             modifier = Modifier.padding(horizontal = 24.dp),
                             thickness = 0.5.dp,
                             color = Color(0xFFF0F0F0)

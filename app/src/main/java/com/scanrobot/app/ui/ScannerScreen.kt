@@ -315,11 +315,11 @@ private fun ResultHeader(viewModel: ScanViewModel) {
             )
         }
     }
-    HorizontalDivider(thickness = 0.5.dp, color = BorderLight)
+    Divider(thickness = 0.5.dp, color = BorderLight)
 }
 
 @Composable
-private fun ScanResultList(viewModel: ScanViewModel) {
+private fun ColumnScope.ScanResultList(viewModel: ScanViewModel) {
     val list = viewModel.scanList.value
 
     if (list.isEmpty()) {
@@ -392,7 +392,7 @@ private fun ScanResultList(viewModel: ScanViewModel) {
                         Text("⋮", fontSize = 16.sp, color = TextSecondary)
                     }
                 }
-                HorizontalDivider(
+                Divider(
                     modifier = Modifier.padding(horizontal = 16.dp),
                     thickness = 0.5.dp,
                     color = Color(0xFFF0F0F0)
