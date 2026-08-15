@@ -20,9 +20,9 @@ data class ScanBatch(
 }
 
 data class ScanSettings(
-    var scanMode: String = "half",
-    var allowDuplicate: Boolean = true,
-    var autoSavePhoto: Boolean = true,
-    var scanType: String = "all",
-    var alertType: String = "sound"
+    val scanMode: String = "half",
+    val allowDuplicate: Boolean = true,
+    val autoSavePhoto: Boolean = true,
+    val scanType: String = "all",
+    val alertType: String = "sound"
 )

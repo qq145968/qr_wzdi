@@ -58,9 +58,10 @@ fun HomeScreen(viewModel: ScanViewModel) {
     }
 
     if (showPicker) {
+        val pickerSettings by viewModel.settings.collectAsState()
         PickerSheet(
             type = pickerType,
-            settings = viewModel.settings.value,
+            settings = pickerSettings,
             onDismiss = { showPicker = false },
             onSelect = { value ->
                 when (pickerType) {
@@ -147,7 +148,7 @@ private fun ScanTab(
     viewModel: ScanViewModel,
     onPickerOpen: (String) -> Unit
 ) {
-    val settings = viewModel.settings.value
+    val settings by viewModel.settings.collectAsState()
 
     Column(modifier = Modifier.padding(16.dp)) {
         Card(
@@ -261,7 +262,7 @@ private fun ToggleSwitch(isOn: Boolean, onToggle: () -> Unit) {
 
 @Composable
 private fun ManageTab(viewModel: ScanViewModel) {
-    val batches = viewModel.batches.value
+    val batches by viewModel.batches.collectAsState()
     val clipboardManager = LocalClipboardManager.current
 
     Column(modifier = Modifier.padding(16.dp)) {
@@ -280,7 +281,7 @@ private fun ManageTab(viewModel: ScanViewModel) {
                     modifier = Modifier.clickable {
                         val text = viewModel.exportHistory()
                         clipboardManager.setText(AnnotatedString(text))
-                        viewModel.showToast("已复制${viewModel.batches.value.size}个批次")
+                        viewModel.showToast("已复制${batches.size}个批次")
                     }
                 )
                 Spacer(modifier = Modifier.width(16.dp))

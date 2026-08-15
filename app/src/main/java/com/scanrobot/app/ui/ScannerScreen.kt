@@ -57,6 +57,10 @@ fun ScannerScreen(viewModel: ScanViewModel) {
         viewModel.startNewScanSession()
     }
 
+    val flashOn by viewModel.flashOn.collectAsState()
+    val settings by viewModel.settings.collectAsState()
+    val scanList by viewModel.scanList.collectAsState()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -71,8 +75,8 @@ fun ScannerScreen(viewModel: ScanViewModel) {
         ) {
             if (hasCameraPermission) {
                 CameraPreview(
-                    flashEnabled = viewModel.flashOn.value,
-                    scanType = viewModel.settings.value.scanType,
+                    flashEnabled = flashOn,
+                    scanType = settings.scanType,
                     onBarcodeDetected = { result ->
                         viewModel.handleScanResult(result.code, result.type)
                     },
@@ -104,7 +108,6 @@ fun ScannerScreen(viewModel: ScanViewModel) {
             }
 
             // Counter
-            val scanList = viewModel.scanList.value
             if (scanList.isNotEmpty()) {
                 Box(
                     modifier = Modifier
@@ -248,7 +251,7 @@ private fun TopBarButton(onClick: () -> Unit) {
 
 @Composable
 private fun ResultHeader(viewModel: ScanViewModel) {
-    val flashOn = viewModel.flashOn.value
+    val flashOn by viewModel.flashOn.collectAsState()
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
     Row(
@@ -320,7 +323,7 @@ private fun ResultHeader(viewModel: ScanViewModel) {
 
 @Composable
 private fun ColumnScope.ScanResultList(viewModel: ScanViewModel) {
-    val list = viewModel.scanList.value
+    val list by viewModel.scanList.collectAsState()
 
     if (list.isEmpty()) {
         Box(

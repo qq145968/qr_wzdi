@@ -80,32 +80,32 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleDuplicate() {
         val s = _settings.value
-        s.allowDuplicate = !s.allowDuplicate
-        updateSettings(s)
+        _settings.value = s.copy(allowDuplicate = !s.allowDuplicate)
+        store.saveSettings(_settings.value)
     }
 
     fun togglePhoto() {
         val s = _settings.value
-        s.autoSavePhoto = !s.autoSavePhoto
-        updateSettings(s)
+        _settings.value = s.copy(autoSavePhoto = !s.autoSavePhoto)
+        store.saveSettings(_settings.value)
     }
 
     fun setScanMode(mode: String) {
         val s = _settings.value
-        s.scanMode = mode
-        updateSettings(s)
+        _settings.value = s.copy(scanMode = mode)
+        store.saveSettings(_settings.value)
     }
 
     fun setScanType(type: String) {
         val s = _settings.value
-        s.scanType = type
-        updateSettings(s)
+        _settings.value = s.copy(scanType = type)
+        store.saveSettings(_settings.value)
     }
 
     fun setAlertType(type: String) {
         val s = _settings.value
-        s.alertType = type
-        updateSettings(s)
+        _settings.value = s.copy(alertType = type)
+        store.saveSettings(_settings.value)
     }
 
     // Flash
