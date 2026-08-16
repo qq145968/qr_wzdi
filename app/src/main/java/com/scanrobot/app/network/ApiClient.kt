@@ -71,8 +71,8 @@ object ApiClient {
                 userId = resultJson.optJSONObject("data")?.optInt("user_id", 0) ?: 0,
                 username = resultJson.optJSONObject("data")?.optString("username", "")
             )
-        } catch (e: Exception) {
-            ApiResult(success = false, message = "网络错误: ${e.message}")
+        } catch (e: Throwable) {
+            ApiResult(success = false, message = "网络错误: ${e.message ?: "未知错误"}")
         }
     }
 }
