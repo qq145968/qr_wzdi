@@ -81,13 +81,13 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val sharedPrefs = remember { context.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE) }
-    var readMessageIds by remember { mutableStateOf(sharedPrefs.getStringSet("read_message_ids", emptySet()) ?: emptySet()) }
+    var readMessageIds by remember { mutableStateOf<Set<String>>(sharedPrefs.getStringSet("read_message_ids", emptySet()) ?: emptySet()) }
 
     LaunchedEffect(Unit) {
         scope.launch {
             val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo() }
             if (info != null) {
-                val unreadCount = info.messages.count { it.id !in readMessageIds }
+                val unreadCount = info.messages.count { it.id.toString() !in readMessageIds }
                 appInfo = info.copy(unreadCount = unreadCount)
                 val currentCode = BuildConfig.VERSION_CODE
                 val latestVersion = info.latestVersion
@@ -171,12 +171,12 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
 
     if (showMessageDialog && appInfo != null) {
         val messages = appInfo!!.messages.map { msg ->
-            msg.copy(read = msg.id in readMessageIds)
+            msg.copy(read = msg.id.toString() in readMessageIds)
         }
         MessageListDialog(
             messages = messages,
             onDismiss = {
-                val newReadIds = (readMessageIds + appInfo!!.messages.map { it.id }).toSet()
+                val newReadIds = (readMessageIds + appInfo!!.messages.map { it.id.toString() }).toSet()
                 sharedPrefs.edit().putStringSet("read_message_ids", newReadIds).commit()
                 readMessageIds = newReadIds
                 appInfo = appInfo!!.copy(unreadCount = 0)
