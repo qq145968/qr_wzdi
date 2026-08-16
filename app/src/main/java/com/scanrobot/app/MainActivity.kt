@@ -8,8 +8,14 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -19,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.scanrobot.app.ui.AuthScreen
 import com.scanrobot.app.ui.DetailScreen
 import com.scanrobot.app.ui.HomeScreen
@@ -36,7 +44,11 @@ class MainActivity : ComponentActivity() {
 
         val sharedPrefs = getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE)
         val savedToken = sharedPrefs.getString("auth_token", null)
-        val savedUsername = sharedPrefs.getString("auth_username", null)
+
+        // Check for crash log
+        val crashPrefs = getSharedPreferences("crash_log", Context.MODE_PRIVATE)
+        val lastCrash = crashPrefs.getString("last_crash", null)
+        val crashTime = crashPrefs.getLong("crash_time", 0L)
 
         setContent {
             ScanRobotTheme {
@@ -44,8 +56,48 @@ class MainActivity : ComponentActivity() {
                 val toastMessage by viewModel.toastMessage.collectAsState()
                 val snackbarHostState = remember { SnackbarHostState() }
                 var isLoggedIn by remember { mutableStateOf(savedToken != null) }
-
                 var lastBackPress by remember { mutableLongStateOf(0L) }
+                var showCrashDialog by remember { mutableStateOf(lastCrash != null) }
+
+                // Show crash dialog if there was a crash
+                if (showCrashDialog && lastCrash != null) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            crashPrefs.edit().clear().commit()
+                            showCrashDialog = false
+                        },
+                        title = { Text("应用崩溃日志") },
+                        text = {
+                            LazyColumn {
+                                items(lastCrash.split("\n")) { line ->
+                                    Text(
+                                        text = line,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.padding(vertical = 1.dp)
+                                    )
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                crashPrefs.edit().clear().commit()
+                                showCrashDialog = false
+                            }) {
+                                Text("知道了")
+                            }
+                        }
+                    )
+                }
+
+                BackHandler(enabled = !isLoggedIn) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastBackPress < 2000) {
+                        finish()
+                    } else {
+                        lastBackPress = now
+                        viewModel.showToast("再按一次退出应用")
+                    }
+                }
 
                 BackHandler(enabled = isLoggedIn) {
                     when (currentScreen) {
@@ -80,16 +132,16 @@ class MainActivity : ComponentActivity() {
                             is Screen.Scanner -> ScannerScreen(viewModel)
                             is Screen.Detail -> DetailScreen(viewModel, screen.batchId)
                         }
-
-                        SnackbarHost(
-                            hostState = snackbarHostState,
-                            modifier = Modifier.align(Alignment.BottomCenter)
-                        )
                     } else {
                         AuthScreen {
                             isLoggedIn = true
                         }
                     }
+
+                    SnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
                 }
             }
         }
