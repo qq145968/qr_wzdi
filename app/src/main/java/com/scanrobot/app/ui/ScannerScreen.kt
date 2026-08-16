@@ -309,10 +309,11 @@ private fun ResultHeader(viewModel: ScanViewModel) {
                 color = BluePrimary,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.clickable {
-                    val csv = viewModel.exportCsv()
-                    if (csv.isNotEmpty()) {
-                        clipboardManager.setText(AnnotatedString(csv))
-                        viewModel.showToast("已导出CSV")
+                    val filePath = viewModel.exportCsvToFile()
+                    if (filePath.isNotEmpty()) {
+                        viewModel.showToast("已导出到: $filePath")
+                    } else {
+                        viewModel.showToast("暂无可导出的数据")
                     }
                 }
             )

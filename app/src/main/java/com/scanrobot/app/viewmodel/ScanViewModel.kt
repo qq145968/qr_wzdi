@@ -1,6 +1,8 @@
 package com.scanrobot.app.viewmodel
 
 import android.app.Application
+import android.os.Build
+import android.os.Environment
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.scanrobot.app.ScanApp
@@ -14,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -162,6 +165,23 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
             sb.append("${idx + 1},${item.code},$t,${item.time}\n")
         }
         return sb.toString()
+    }
+
+    fun exportCsvToFile(): String {
+        val csv = exportCsv()
+        if (csv.isEmpty()) return ""
+        val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+        val fileName = "扫码记录_${dateFormat.format(Date())}.csv"
+        val downloadDir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            File(getApplication<Application>().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "ScanRobot")
+        } else {
+            @Suppress("DEPRECATION")
+            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ScanRobot")
+        }
+        if (!downloadDir.exists()) downloadDir.mkdirs()
+        val file = File(downloadDir, fileName)
+        file.writeText(csv, Charsets.UTF_8)
+        return file.absolutePath
     }
 
     // Batch management

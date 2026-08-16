@@ -3,6 +3,7 @@ package com.scanrobot.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,7 +12,10 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.scanrobot.app.ui.DetailScreen
@@ -32,6 +36,25 @@ class MainActivity : ComponentActivity() {
                 val currentScreen by viewModel.currentScreen.collectAsState()
                 val toastMessage by viewModel.toastMessage.collectAsState()
                 val snackbarHostState = remember { SnackbarHostState() }
+
+                var lastBackPress by remember { mutableLongStateOf(0L) }
+
+                BackHandler(enabled = true) {
+                    when (currentScreen) {
+                        is Screen.Scanner, is Screen.Detail -> {
+                            viewModel.goBack()
+                        }
+                        is Screen.Home -> {
+                            val now = System.currentTimeMillis()
+                            if (now - lastBackPress < 2000) {
+                                finish()
+                            } else {
+                                lastBackPress = now
+                                viewModel.showToast("再按一次退出应用")
+                            }
+                        }
+                    }
+                }
 
                 LaunchedEffect(toastMessage) {
                     val msg = toastMessage
