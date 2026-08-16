@@ -1,6 +1,8 @@
 package com.scanrobot.app.ui
 
+import android.app.Activity
 import android.content.Context
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -45,10 +47,21 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
     var messageIsError by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    var lastBackPress by remember { mutableLongStateOf(0L) }
 
-    BackHandler(enabled = screenMode != "login") {
-        screenMode = "login"
-        message = ""
+    BackHandler(enabled = true) {
+        if (screenMode != "login") {
+            screenMode = "login"
+            message = ""
+        } else {
+            val now = System.currentTimeMillis()
+            if (now - lastBackPress < 2000) {
+                (context as? Activity)?.finish()
+            } else {
+                lastBackPress = now
+                Toast.makeText(context, "再按一次退出应用", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     Column(
@@ -98,7 +111,6 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                     val result = withContext(Dispatchers.IO) {
                                         ApiClient.login(username, password)
                                     }
-                                    isLoading = false
                                     if (result.success && !result.token.isNullOrEmpty()) {
                                         val sharedPrefs = context.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE)
                                         sharedPrefs.edit()
@@ -110,9 +122,10 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                     } else {
                                         message = result.message; messageIsError = true
                                     }
-                                } catch (e: Exception) {
+                                } catch (e: Throwable) {
+                                    message = "登录失败: ${e.message ?: "未知错误"}"; messageIsError = true
+                                } finally {
                                     isLoading = false
-                                    message = "登录失败: ${e.message}"; messageIsError = true
                                 }
                             }
                         }
@@ -141,7 +154,6 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                         val result = withContext(Dispatchers.IO) {
                                             ApiClient.register(username, password, email)
                                         }
-                                        isLoading = false
                                         if (result.success) {
                                             message = "注册成功，请登录"; messageIsError = false
                                             screenMode = "login"
@@ -149,9 +161,10 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                         } else {
                                             message = result.message; messageIsError = true
                                         }
-                                    } catch (e: Exception) {
+                                    } catch (e: Throwable) {
+                                        message = "注册失败: ${e.message ?: "未知错误"}"; messageIsError = true
+                                    } finally {
                                         isLoading = false
-                                        message = "注册失败: ${e.message}"; messageIsError = true
                                     }
                                 }
                             }
@@ -175,12 +188,12 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                     val result = withContext(Dispatchers.IO) {
                                         ApiClient.forgotPassword(email, username)
                                     }
-                                    isLoading = false
-                                    message = if (result.success) result.message else result.message
+                                    message = result.message
                                     messageIsError = !result.success
-                                } catch (e: Exception) {
+                                } catch (e: Throwable) {
+                                    message = "发送失败: ${e.message ?: "未知错误"}"; messageIsError = true
+                                } finally {
                                     isLoading = false
-                                    message = "发送失败: ${e.message}"; messageIsError = true
                                 }
                             }
                         }
@@ -196,7 +209,6 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                         val result = withContext(Dispatchers.IO) {
                                             ApiClient.resetPassword(resetToken, newPassword)
                                         }
-                                        isLoading = false
                                         if (result.success) {
                                             message = "密码重置成功，请登录"; messageIsError = false
                                             screenMode = "login"
@@ -204,9 +216,10 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                         } else {
                                             message = result.message; messageIsError = true
                                         }
-                                    } catch (e: Exception) {
+                                    } catch (e: Throwable) {
+                                        message = "重置失败: ${e.message ?: "未知错误"}"; messageIsError = true
+                                    } finally {
                                         isLoading = false
-                                        message = "重置失败: ${e.message}"; messageIsError = true
                                     }
                                 }
                             }
