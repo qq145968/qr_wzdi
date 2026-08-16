@@ -47,7 +47,7 @@ class MainActivity : ComponentActivity() {
 
                 var lastBackPress by remember { mutableLongStateOf(0L) }
 
-                BackHandler(enabled = true) {
+                BackHandler(enabled = isLoggedIn) {
                     when (currentScreen) {
                         is Screen.Scanner, is Screen.Detail -> {
                             viewModel.goBack()
