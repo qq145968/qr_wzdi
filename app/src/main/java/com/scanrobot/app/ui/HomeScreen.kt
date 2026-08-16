@@ -1,6 +1,12 @@
 package com.scanrobot.app.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -11,11 +17,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.Folder
@@ -32,13 +42,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.scanrobot.app.BuildConfig
+import com.scanrobot.app.data.AppInfo
+import com.scanrobot.app.data.AppMessage
 import com.scanrobot.app.data.ScanBatch
 import com.scanrobot.app.data.ScanModeOption
 import com.scanrobot.app.data.ScanSettings
-import com.scanrobot.app.BuildConfig
+import com.scanrobot.app.data.VersionInfo
 import com.scanrobot.app.data.scanModeOptions
+import com.scanrobot.app.network.ApiClient
 import com.scanrobot.app.ui.theme.*
 import com.scanrobot.app.viewmodel.ScanViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun HomeScreen(viewModel: ScanViewModel) {
@@ -46,6 +63,25 @@ fun HomeScreen(viewModel: ScanViewModel) {
     var showModePicker by remember { mutableStateOf(false) }
     var showTypePicker by remember { mutableStateOf(false) }
     var showAlertPicker by remember { mutableStateOf(false) }
+
+    var appInfo by remember { mutableStateOf<AppInfo?>(null) }
+    var showMessageDialog by remember { mutableStateOf(false) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        scope.launch {
+            val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo() }
+            if (info != null) {
+                appInfo = info
+                val currentCode = BuildConfig.VERSION_CODE
+                val latestVersion = info.latestVersion
+                if (latestVersion != null && latestVersion.versionCode > currentCode) {
+                    showUpdateDialog = true
+                }
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -63,8 +99,16 @@ fun HomeScreen(viewModel: ScanViewModel) {
                     onAlertPickerOpen = { showAlertPicker = true }
                 )
                 "manage" -> ManageTab(viewModel)
-                "profile" -> ProfileTab(viewModel)
+                "profile" -> ProfileTab(
+                    viewModel = viewModel,
+                    appInfo = appInfo,
+                    onMessageClick = { showMessageDialog = true }
+                )
             }
+        }
+
+        if (!appInfo?.announcement.isNullOrEmpty()) {
+            AnnouncementBar(text = appInfo!!.announcement)
         }
 
         BottomNavBar(activeTab) { activeTab = it }
@@ -107,6 +151,72 @@ fun HomeScreen(viewModel: ScanViewModel) {
                 showAlertPicker = false
             }
         )
+    }
+
+    if (showMessageDialog && appInfo != null) {
+        MessageListDialog(
+            messages = appInfo!!.messages,
+            onDismiss = { showMessageDialog = false }
+        )
+    }
+
+    if (showUpdateDialog && appInfo?.latestVersion != null) {
+        val version = appInfo!!.latestVersion!!
+        VersionUpdateDialog(
+            version = version,
+            onDismiss = {
+                if (!version.forceUpdate) showUpdateDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun AnnouncementBar(text: String) {
+    val transition = rememberInfiniteTransition(label = "announcement")
+    val offset by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = -1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 15000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "scroll"
+    )
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color(0xFFFFF8E1),
+        shadowElevation = 4.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "\uD83D\uDCE2",
+                fontSize = 14.sp,
+                modifier = Modifier.padding(end = 6.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(20.dp)
+                    .clip(RoundedCornerShape(4.dp))
+            ) {
+                Text(
+                    text = text,
+                    fontSize = 13.sp,
+                    color = Color(0xFFE65100),
+                    maxLines = 1,
+                    modifier = Modifier
+                        .offset { IntOffset(x = (offset * 400).toInt(), y = 0) }
+                        .padding(vertical = 1.dp)
+                )
+            }
+        }
     }
 }
 
@@ -336,7 +446,10 @@ private fun ManageTab(viewModel: ScanViewModel) {
                     fontSize = 14.sp,
                     color = DangerRed,
                     fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clickable { viewModel.clearAll() }
+                    modifier = Modifier.clickable {
+                        viewModel.clearAll()
+                        viewModel.showToast("所有数据已清除")
+                    }
                 )
             }
         }
@@ -367,37 +480,77 @@ private fun ManageTab(viewModel: ScanViewModel) {
 }
 
 @Composable
-private fun ProfileTab(viewModel: ScanViewModel) {
+private fun ProfileTab(
+    viewModel: ScanViewModel,
+    appInfo: AppInfo?,
+    onMessageClick: () -> Unit
+) {
     val batches by viewModel.batches.collectAsState()
     val settings by viewModel.settings.collectAsState()
 
     val totalCount = batches.sumOf { it.count }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Column(
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(BluePrimary)
-                .padding(top = 20.dp, bottom = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(
+            Row(
                 modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End
             ) {
-                Icon(
-                    Icons.Filled.Person,
-                    contentDescription = "头像",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.2f))
+                        .clickable { onMessageClick() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    BadgedBox(
+                        badge = {
+                            if (appInfo != null && appInfo.unreadCount > 0) {
+                                Badge { Text(if (appInfo.unreadCount > 99) "99+" else appInfo.unreadCount.toString()) }
+                            }
+                        }
+                    ) {
+                        Icon(
+                            Icons.Filled.Notifications,
+                            contentDescription = "消息",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("扫码机器人", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-            Text("v${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = "头像",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("扫码机器人", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("v${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
+            }
         }
 
         Row(
@@ -452,6 +605,91 @@ private fun ProfileTab(viewModel: ScanViewModel) {
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun MessageListDialog(messages: List<AppMessage>, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("消息通知", fontWeight = FontWeight.Bold) },
+        text = {
+            if (messages.isEmpty()) {
+                Text("暂无消息", color = TextSecondary, modifier = Modifier.padding(vertical = 16.dp))
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(messages) { msg ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(BgLight)
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(msg.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                                Text(msgTypeText(msg.type), fontSize = 12.sp, color = TextSecondary)
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(msg.content, fontSize = 14.sp, color = TextSecondary, lineHeight = 20.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(msg.createdAt, fontSize = 12.sp, color = Color(0xFFBBBBBB))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        }
+    )
+}
+
+@Composable
+private fun VersionUpdateDialog(version: VersionInfo, onDismiss: () -> Unit) {
+    if (version.forceUpdate) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("发现新版本", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("v${version.versionName}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = BluePrimary)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(version.updateContent.ifEmpty { "请更新到最新版本" }, fontSize = 14.sp, color = TextSecondary, lineHeight = 20.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("此版本为强制更新，请下载后安装", fontSize = 13.sp, color = DangerRed)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onDismiss() }) { Text("去下载") }
+            }
+        )
+    } else {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("发现新版本", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("v${version.versionName}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = BluePrimary)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(version.updateContent.ifEmpty { "优化体验，修复已知问题" }, fontSize = 14.sp, color = TextSecondary, lineHeight = 20.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onDismiss) { Text("稍后") }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) { Text("立即更新") }
+            }
+        )
     }
 }
 
@@ -584,7 +822,6 @@ private fun ChevronRight() {
     )
 }
 
-// Helper text functions
 private fun modeText(mode: String) = when (mode) {
     "half" -> "半屏连扫"
     "full" -> "全屏连扫"
@@ -607,7 +844,14 @@ private fun alertText(alert: String) = when (alert) {
     else -> "\"滴\"声"
 }
 
-// Card-style scan mode picker (matches the reference design)
+private fun msgTypeText(type: String): String = when (type) {
+    "system" -> "系统"
+    "update" -> "更新"
+    "activity" -> "活动"
+    "custom" -> "通知"
+    else -> "通知"
+}
+
 @Composable
 private fun ScanModePickerSheet(
     currentMode: String,
@@ -732,7 +976,6 @@ private fun ModeCard(option: ScanModeOption, isSelected: Boolean, onClick: () ->
     }
 }
 
-// Simple picker for scan type and alert type
 @Composable
 private fun SimplePickerSheet(
     title: String,
