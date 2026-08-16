@@ -1,9 +1,7 @@
 package com.scanrobot.app.ui
 
-import android.app.Activity
 import android.content.Context
-import android.widget.Toast
-import androidx.activity.compose.BackHandler
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -47,22 +45,6 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
     var messageIsError by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    var lastBackPress by remember { mutableLongStateOf(0L) }
-
-    BackHandler(enabled = true) {
-        if (screenMode != "login") {
-            screenMode = "login"
-            message = ""
-        } else {
-            val now = System.currentTimeMillis()
-            if (now - lastBackPress < 2000) {
-                (context as? Activity)?.finish()
-            } else {
-                lastBackPress = now
-                Toast.makeText(context, "再按一次退出应用", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
 
     Column(
         modifier = Modifier
@@ -108,21 +90,24 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                 isLoading = true
                                 message = ""
                                 try {
+                                    Log.d("AuthScreen", "Starting login for: $username")
                                     val result = withContext(Dispatchers.IO) {
                                         ApiClient.login(username, password)
                                     }
+                                    Log.d("AuthScreen", "Login result: success=${result.success}, msg=${result.message}")
                                     if (result.success && !result.token.isNullOrEmpty()) {
                                         val sharedPrefs = context.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE)
                                         sharedPrefs.edit()
                                             .putString("auth_token", result.token)
                                             .putString("auth_username", result.username ?: username)
-                                            .apply()
+                                            .commit()
                                         message = "登录成功"; messageIsError = false
                                         onLoginSuccess()
                                     } else {
                                         message = result.message; messageIsError = true
                                     }
                                 } catch (e: Throwable) {
+                                    Log.e("AuthScreen", "Login exception", e)
                                     message = "登录失败: ${e.message ?: "未知错误"}"; messageIsError = true
                                 } finally {
                                     isLoading = false
@@ -151,9 +136,11 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                     isLoading = true
                                     message = ""
                                     try {
+                                        Log.d("AuthScreen", "Starting register for: $username")
                                         val result = withContext(Dispatchers.IO) {
                                             ApiClient.register(username, password, email)
                                         }
+                                        Log.d("AuthScreen", "Register result: success=${result.success}")
                                         if (result.success) {
                                             message = "注册成功，请登录"; messageIsError = false
                                             screenMode = "login"
@@ -162,6 +149,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                             message = result.message; messageIsError = true
                                         }
                                     } catch (e: Throwable) {
+                                        Log.e("AuthScreen", "Register exception", e)
                                         message = "注册失败: ${e.message ?: "未知错误"}"; messageIsError = true
                                     } finally {
                                         isLoading = false
@@ -185,12 +173,15 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                             scope.launch {
                                 isLoading = true; message = ""
                                 try {
+                                    Log.d("AuthScreen", "Starting forgotPassword for: $email")
                                     val result = withContext(Dispatchers.IO) {
                                         ApiClient.forgotPassword(email, username)
                                     }
+                                    Log.d("AuthScreen", "ForgotPassword result: success=${result.success}")
                                     message = result.message
                                     messageIsError = !result.success
                                 } catch (e: Throwable) {
+                                    Log.e("AuthScreen", "ForgotPassword exception", e)
                                     message = "发送失败: ${e.message ?: "未知错误"}"; messageIsError = true
                                 } finally {
                                     isLoading = false
@@ -206,9 +197,11 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                 scope.launch {
                                     isLoading = true; message = ""
                                     try {
+                                        Log.d("AuthScreen", "Starting resetPassword")
                                         val result = withContext(Dispatchers.IO) {
                                             ApiClient.resetPassword(resetToken, newPassword)
                                         }
+                                        Log.d("AuthScreen", "ResetPassword result: success=${result.success}")
                                         if (result.success) {
                                             message = "密码重置成功，请登录"; messageIsError = false
                                             screenMode = "login"
@@ -217,6 +210,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                             message = result.message; messageIsError = true
                                         }
                                     } catch (e: Throwable) {
+                                        Log.e("AuthScreen", "ResetPassword exception", e)
                                         message = "重置失败: ${e.message ?: "未知错误"}"; messageIsError = true
                                     } finally {
                                         isLoading = false
