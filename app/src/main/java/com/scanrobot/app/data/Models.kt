@@ -26,3 +26,16 @@ data class ScanSettings(
     val scanType: String = "all",
     val alertType: String = "sound"
 )
+
+data class ScanModeOption(
+    val key: String,
+    val title: String,
+    val description: String
+)
+
+val scanModeOptions = listOf(
+    ScanModeOption("full", "全屏连扫", "沉浸式扫码，连续效率高，自动保存清晰照片"),
+    ScanModeOption("new_full", "新版全屏连扫", "基于全屏，支持扫码列表显示，体验更流畅"),
+    ScanModeOption("half", "半屏连扫", "同步列表显示，效率高，自动保存清晰照片"),
+    ScanModeOption("wechat", "微信原生扫码", "识别率高，切页体验差，照片模糊风险")
+)

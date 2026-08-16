@@ -13,6 +13,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.CenterFocusStrong
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,15 +33,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scanrobot.app.data.ScanBatch
+import com.scanrobot.app.data.ScanModeOption
 import com.scanrobot.app.data.ScanSettings
+import com.scanrobot.app.data.scanModeOptions
 import com.scanrobot.app.ui.theme.*
 import com.scanrobot.app.viewmodel.ScanViewModel
 
 @Composable
 fun HomeScreen(viewModel: ScanViewModel) {
     var activeTab by remember { mutableStateOf("scan") }
-    var showPicker by remember { mutableStateOf(false) }
-    var pickerType by remember { mutableStateOf("") }
+    var showModePicker by remember { mutableStateOf(false) }
+    var showTypePicker by remember { mutableStateOf(false) }
+    var showAlertPicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -42,34 +52,58 @@ fun HomeScreen(viewModel: ScanViewModel) {
             .background(BgLight)
     ) {
         AppHeader()
-        TabBar(activeTab) { activeTab = it }
 
-        if (activeTab == "scan") {
-            ScanTab(
-                viewModel = viewModel,
-                onPickerOpen = { type ->
-                    pickerType = type
-                    showPicker = true
-                }
-            )
-        } else {
-            ManageTab(viewModel)
+        Box(modifier = Modifier.weight(1f)) {
+            when (activeTab) {
+                "scan" -> ScanTab(
+                    viewModel = viewModel,
+                    onModePickerOpen = { showModePicker = true },
+                    onTypePickerOpen = { showTypePicker = true },
+                    onAlertPickerOpen = { showAlertPicker = true }
+                )
+                "manage" -> ManageTab(viewModel)
+                "profile" -> ProfileTab(viewModel)
+            }
         }
+
+        BottomNavBar(activeTab) { activeTab = it }
     }
 
-    if (showPicker) {
-        val pickerSettings by viewModel.settings.collectAsState()
-        PickerSheet(
-            type = pickerType,
-            settings = pickerSettings,
-            onDismiss = { showPicker = false },
+    val settings by viewModel.settings.collectAsState()
+
+    if (showModePicker) {
+        ScanModePickerSheet(
+            currentMode = settings.scanMode,
+            onDismiss = { showModePicker = false },
             onSelect = { value ->
-                when (pickerType) {
-                    "mode" -> viewModel.setScanMode(value)
-                    "scanType" -> viewModel.setScanType(value)
-                    "alert" -> viewModel.setAlertType(value)
-                }
-                showPicker = false
+                viewModel.setScanMode(value)
+                showModePicker = false
+            }
+        )
+    }
+
+    if (showTypePicker) {
+        SimplePickerSheet(
+            title = "选择扫码类型",
+            options = listOf("条形码+二维码" to "all", "仅条形码" to "barcode", "仅二维码" to "qrcode"),
+            currentValue = settings.scanType,
+            onDismiss = { showTypePicker = false },
+            onSelect = { value ->
+                viewModel.setScanType(value)
+                showTypePicker = false
+            }
+        )
+    }
+
+    if (showAlertPicker) {
+        SimplePickerSheet(
+            title = "选择提示方式",
+            options = listOf("\"滴\"声" to "sound", "震动" to "vibrate", "无提示" to "none"),
+            currentValue = settings.alertType,
+            onDismiss = { showAlertPicker = false },
+            onSelect = { value ->
+                viewModel.setAlertType(value)
+                showAlertPicker = false
             }
         )
     }
@@ -102,43 +136,52 @@ private fun AppHeader() {
 }
 
 @Composable
-private fun TabBar(active: String, onSwitch: (String) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(BgWhite)
-            .padding(bottom = 0.dp),
-        horizontalArrangement = Arrangement.Center
-    ) {
-        TabItem("扫码", active == "scan") { onSwitch("scan") }
-        Spacer(modifier = Modifier.width(40.dp))
-        TabItem("管理", active == "manage") { onSwitch("manage") }
-    }
-    Divider(
+private fun BottomNavBar(active: String, onSwitch: (String) -> Unit) {
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        thickness = 0.5.dp,
-        color = BorderLight
-    )
+        color = BgWhite,
+        shadowElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            NavItem("扫码", active == "scan",
+                if (active == "scan") Icons.Filled.CenterFocusStrong else Icons.Outlined.CenterFocusStrong
+            ) { onSwitch("scan") }
+            NavItem("管理", active == "manage",
+                if (active == "manage") Icons.Filled.Folder else Icons.Outlined.Folder
+            ) { onSwitch("manage") }
+            NavItem("个人中心", active == "profile",
+                if (active == "profile") Icons.Filled.Person else Icons.Outlined.Person
+            ) { onSwitch("profile") }
+        }
+    }
 }
 
 @Composable
-private fun TabItem(label: String, active: Boolean, onClick: () -> Unit) {
+private fun NavItem(label: String, active: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     Column(
-        modifier = Modifier.clickable { onClick() },
+        modifier = Modifier
+            .clickable { onClick() }
+            .padding(horizontal = 20.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (active) BluePrimary else Color(0xFF999999),
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.height(2.dp))
         Text(
             label,
-            fontSize = 15.sp,
-            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (active) BluePrimary else TextSecondary,
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
-        Box(
-            modifier = Modifier
-                .width(24.dp)
-                .height(3.dp)
-                .background(if (active) BluePrimary else Color.Transparent, RoundedCornerShape(2.dp))
+            fontSize = 11.sp,
+            color = if (active) BluePrimary else Color(0xFF999999),
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal
         )
     }
 }
@@ -146,7 +189,9 @@ private fun TabItem(label: String, active: Boolean, onClick: () -> Unit) {
 @Composable
 private fun ScanTab(
     viewModel: ScanViewModel,
-    onPickerOpen: (String) -> Unit
+    onModePickerOpen: () -> Unit,
+    onTypePickerOpen: () -> Unit,
+    onAlertPickerOpen: () -> Unit
 ) {
     val settings by viewModel.settings.collectAsState()
 
@@ -158,15 +203,15 @@ private fun ScanTab(
             border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
         ) {
             Column {
-                SettingRowClick("扫码模式", modeText(settings.scanMode)) { onPickerOpen("mode") }
+                SettingRowClick("扫码模式", modeText(settings.scanMode)) { onModePickerOpen() }
                 SettingRowToggle("允许二维码重复录入", settings.allowDuplicate) {
                     viewModel.toggleDuplicate()
                 }
                 SettingRowToggle("自动保存扫码照片", settings.autoSavePhoto) {
                     viewModel.togglePhoto()
                 }
-                SettingRowClick("扫码类型", typeText(settings.scanType)) { onPickerOpen("scanType") }
-                SettingRowClick("扫码提示音", alertText(settings.alertType)) { onPickerOpen("alert") }
+                SettingRowClick("扫码类型", typeText(settings.scanType)) { onTypePickerOpen() }
+                SettingRowClick("扫码提示音", alertText(settings.alertType)) { onAlertPickerOpen() }
             }
         }
 
@@ -321,6 +366,115 @@ private fun ManageTab(viewModel: ScanViewModel) {
 }
 
 @Composable
+private fun ProfileTab(viewModel: ScanViewModel) {
+    val batches by viewModel.batches.collectAsState()
+    val settings by viewModel.settings.collectAsState()
+
+    val totalCount = batches.sumOf { it.count }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(BluePrimary)
+                .padding(top = 20.dp, bottom = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.Person,
+                    contentDescription = "头像",
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("扫码机器人", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text("v1.1.0", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(BgWhite)
+                .padding(vertical = 16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            StatItem("$totalCount", "累计扫码")
+            Divider(color = BorderLight, modifier = Modifier.width(0.5.dp).height(32.dp))
+            StatItem("${batches.size}", "扫码批次")
+            Divider(color = BorderLight, modifier = Modifier.width(0.5.dp).height(32.dp))
+            StatItem(modeText(settings.scanMode), "当前模式")
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = BgWhite),
+            border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
+        ) {
+            Column {
+                ProfileRow("当前扫码模式", modeText(settings.scanMode))
+                ProfileRow("扫码类型", typeText(settings.scanType))
+                ProfileRow("提示方式", alertText(settings.alertType))
+                ProfileRow("允许重复录入", if (settings.allowDuplicate) "已开启" else "已关闭")
+                ProfileRow("自动保存照片", if (settings.autoSavePhoto) "已开启" else "已关闭")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = BgWhite),
+            border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
+        ) {
+            Column {
+                ProfileRow("关于应用", "v1.1.0")
+                Divider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color(0xFFF0F0F0))
+                ProfileRow("清除所有数据", "点击清除")
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatItem(value: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = BluePrimary)
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(label, fontSize = 12.sp, color = TextSecondary)
+    }
+}
+
+@Composable
+private fun ProfileRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 15.sp, color = TextPrimary)
+        Text(value, fontSize = 14.sp, color = TextSecondary)
+    }
+}
+
+@Composable
 private fun BatchItem(batch: ScanBatch, onClick: () -> Unit) {
     Row(
         modifier = Modifier
@@ -414,7 +568,9 @@ private fun ChevronRight() {
 // Helper text functions
 private fun modeText(mode: String) = when (mode) {
     "half" -> "半屏连扫"
-    "full" -> "全屏单扫"
+    "full" -> "全屏连扫"
+    "new_full" -> "新版全屏连扫"
+    "wechat" -> "微信原生扫码"
     else -> "半屏连扫"
 }
 
@@ -432,34 +588,140 @@ private fun alertText(alert: String) = when (alert) {
     else -> "\"滴\"声"
 }
 
+// Card-style scan mode picker (matches the reference design)
 @Composable
-private fun PickerSheet(
-    type: String,
-    settings: ScanSettings,
+private fun ScanModePickerSheet(
+    currentMode: String,
     onDismiss: () -> Unit,
     onSelect: (String) -> Unit
 ) {
-    val title = when (type) {
-        "mode" -> "选择扫码模式"
-        "scanType" -> "选择扫码类型"
-        "alert" -> "选择提示方式"
-        else -> ""
-    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.5f))
+            .clickable { onDismiss() }
+    ) {
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .clickable(enabled = false) {},
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            color = BgWhite
+        ) {
+            Column(
+                modifier = Modifier.padding(bottom = 24.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "请选择扫码模式",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF5F5F5))
+                            .clickable { onDismiss() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("×", fontSize = 20.sp, color = TextSecondary)
+                    }
+                }
 
-    val options = when (type) {
-        "mode" -> listOf("半屏连扫" to "half", "全屏单扫" to "full")
-        "scanType" -> listOf("条形码+二维码" to "all", "仅条形码" to "barcode", "仅二维码" to "qrcode")
-        "alert" -> listOf("\"滴\"声" to "sound", "震动" to "vibrate", "无提示" to "none")
-        else -> emptyList()
+                scanModeOptions.forEach { option ->
+                    ModeCard(
+                        option = option,
+                        isSelected = currentMode == option.key,
+                        onClick = { onSelect(option.key) }
+                    )
+                    if (option != scanModeOptions.last()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+                }
+            }
+        }
     }
+}
 
-    val currentVal = when (type) {
-        "mode" -> settings.scanMode
-        "scanType" -> settings.scanType
-        "alert" -> settings.alertType
-        else -> ""
+@Composable
+private fun ModeCard(option: ScanModeOption, isSelected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(BgWhite)
+                .border(
+                    width = if (isSelected) 2.dp else 1.dp,
+                    color = if (isSelected) BluePrimary else Color(0xFFE0E0E0),
+                    shape = RoundedCornerShape(10.dp)
+                )
+                .clickable { onClick() }
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            Column {
+                Text(
+                    option.title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    option.description,
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    lineHeight = 18.sp
+                )
+            }
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 6.dp, y = (-6).dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(0.dp)
+                            .background(Color.Transparent)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(RoundedCornerShape(0.dp))
+                            .background(BluePrimary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("✓", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
     }
+}
 
+// Simple picker for scan type and alert type
+@Composable
+private fun SimplePickerSheet(
+    title: String,
+    options: List<Pair<String, String>>,
+    currentValue: String,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit
+) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -490,15 +752,13 @@ private fun PickerSheet(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                onSelect(value)
-                            }
+                            .clickable { onSelect(value) }
                             .padding(horizontal = 24.dp, vertical = 16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(label, fontSize = 16.sp, color = TextPrimary)
-                        if (currentVal == value) {
+                        if (currentValue == value) {
                             Text("✓", fontSize = 18.sp, color = BluePrimary)
                         }
                     }
