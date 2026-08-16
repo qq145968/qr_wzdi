@@ -1,5 +1,6 @@
 package com.scanrobot.app
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.scanrobot.app.ui.AuthScreen
 import com.scanrobot.app.ui.DetailScreen
 import com.scanrobot.app.ui.HomeScreen
 import com.scanrobot.app.ui.ScannerScreen
@@ -31,11 +33,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val sharedPrefs = getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE)
+        val savedToken = sharedPrefs.getString("auth_token", null)
+        val savedUsername = sharedPrefs.getString("auth_username", null)
+
         setContent {
             ScanRobotTheme {
                 val currentScreen by viewModel.currentScreen.collectAsState()
                 val toastMessage by viewModel.toastMessage.collectAsState()
                 val snackbarHostState = remember { SnackbarHostState() }
+                var isLoggedIn by remember { mutableStateOf(savedToken != null) }
 
                 var lastBackPress by remember { mutableLongStateOf(0L) }
 
@@ -65,16 +73,22 @@ class MainActivity : ComponentActivity() {
                 }
 
                 Box(modifier = Modifier.fillMaxSize()) {
-                    when (val screen = currentScreen) {
-                        is Screen.Home -> HomeScreen(viewModel)
-                        is Screen.Scanner -> ScannerScreen(viewModel)
-                        is Screen.Detail -> DetailScreen(viewModel, screen.batchId)
-                    }
+                    if (isLoggedIn) {
+                        when (val screen = currentScreen) {
+                            is Screen.Home -> HomeScreen(viewModel)
+                            is Screen.Scanner -> ScannerScreen(viewModel)
+                            is Screen.Detail -> DetailScreen(viewModel, screen.batchId)
+                        }
 
-                    SnackbarHost(
-                        hostState = snackbarHostState,
-                        modifier = Modifier.align(Alignment.BottomCenter)
-                    )
+                        SnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        )
+                    } else {
+                        AuthScreen {
+                            isLoggedIn = true
+                        }
+                    }
                 }
             }
         }
