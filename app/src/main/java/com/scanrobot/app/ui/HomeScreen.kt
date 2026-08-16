@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.scanrobot.app.data.ScanBatch
 import com.scanrobot.app.data.ScanModeOption
 import com.scanrobot.app.data.ScanSettings
+import com.scanrobot.app.BuildConfig
 import com.scanrobot.app.data.scanModeOptions
 import com.scanrobot.app.ui.theme.*
 import com.scanrobot.app.viewmodel.ScanViewModel
@@ -396,7 +397,7 @@ private fun ProfileTab(viewModel: ScanViewModel) {
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text("扫码机器人", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-            Text("v1.1.0", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
+            Text("v${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
         }
 
         Row(
@@ -443,7 +444,7 @@ private fun ProfileTab(viewModel: ScanViewModel) {
             border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
         ) {
             Column {
-                ProfileRow("关于应用", "v1.1.0")
+                ProfileRow("关于应用", "v${BuildConfig.VERSION_NAME}")
                 Divider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color(0xFFF0F0F0))
                 ProfileRow("清除所有数据", "点击清除")
             }
