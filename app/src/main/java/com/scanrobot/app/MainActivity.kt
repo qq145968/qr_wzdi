@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
                                 viewModel.showToast("再按一次退出应用")
                             }
                         }
+                        else -> {}
                     }
                 }
 
