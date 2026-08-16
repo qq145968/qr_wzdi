@@ -446,7 +446,10 @@ private fun ProfileTab(viewModel: ScanViewModel) {
             Column {
                 ProfileRow("关于应用", "v${BuildConfig.VERSION_NAME}")
                 Divider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color(0xFFF0F0F0))
-                ProfileRow("清除所有数据", "点击清除")
+                ProfileRowClickable("清除所有数据", "点击清除", DangerRed) {
+                    viewModel.clearAll()
+                    viewModel.showToast("所有数据已清除")
+                }
             }
         }
     }
@@ -472,6 +475,21 @@ private fun ProfileRow(label: String, value: String) {
     ) {
         Text(label, fontSize = 15.sp, color = TextPrimary)
         Text(value, fontSize = 14.sp, color = TextSecondary)
+    }
+}
+
+@Composable
+private fun ProfileRowClickable(label: String, value: String, valueColor: Color, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 15.sp, color = TextPrimary)
+        Text(value, fontSize = 14.sp, color = valueColor)
     }
 }
 

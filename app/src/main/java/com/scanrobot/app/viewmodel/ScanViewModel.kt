@@ -1,8 +1,11 @@
 package com.scanrobot.app.viewmodel
 
 import android.app.Application
+import android.content.ContentValues
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.scanrobot.app.ScanApp
@@ -172,16 +175,33 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         if (csv.isEmpty()) return ""
         val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
         val fileName = "扫码记录_${dateFormat.format(Date())}.csv"
-        val downloadDir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            File(getApplication<Application>().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "ScanRobot")
+
+        val resolver = getApplication<Application>().contentResolver
+        val mimeType = "text/csv"
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/ScanRobot")
+            }
+            val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            val uri = resolver.insert(collection, values)
+            if (uri != null) {
+                resolver.openOutputStream(uri)?.use { os ->
+                    os.write(csv.toByteArray(Charsets.UTF_8))
+                }
+                return "Download/ScanRobot/$fileName"
+            }
+            return ""
         } else {
             @Suppress("DEPRECATION")
-            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ScanRobot")
+            val downloadDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ScanRobot")
+            if (!downloadDir.exists()) downloadDir.mkdirs()
+            val file = File(downloadDir, fileName)
+            file.writeText(csv, Charsets.UTF_8)
+            return file.absolutePath
         }
-        if (!downloadDir.exists()) downloadDir.mkdirs()
-        val file = File(downloadDir, fileName)
-        file.writeText(csv, Charsets.UTF_8)
-        return file.absolutePath
     }
 
     // Batch management
