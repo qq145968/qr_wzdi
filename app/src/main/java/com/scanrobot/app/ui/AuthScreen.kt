@@ -1,17 +1,22 @@
 package com.scanrobot.app.ui
 
+import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -20,7 +25,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scanrobot.app.network.ApiClient
-import com.scanrobot.app.network.ApiResult
 import com.scanrobot.app.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -40,11 +44,18 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
     var message by remember { mutableStateOf("") }
     var messageIsError by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    BackHandler(enabled = screenMode != "login") {
+        screenMode = "login"
+        message = ""
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(BgLight)
+            .verticalScroll(rememberScrollState())
     ) {
         Box(
             modifier = Modifier
@@ -78,27 +89,35 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                     isLoading = isLoading,
                     onLogin = {
                         if (username.isBlank() || password.isBlank()) {
-                            message = "请输入用户名和密码"
-                            messageIsError = true
+                            message = "请输入用户名和密码"; messageIsError = true
                         } else {
                             scope.launch {
                                 isLoading = true
-                                val result = withContext(Dispatchers.IO) {
-                                    ApiClient.login(username, password)
-                                }
-                                isLoading = false
-                                if (result.success) {
-                                    message = "登录成功"
-                                    messageIsError = false
-                                    onLoginSuccess()
-                                } else {
-                                    message = result.message
-                                    messageIsError = true
+                                message = ""
+                                try {
+                                    val result = withContext(Dispatchers.IO) {
+                                        ApiClient.login(username, password)
+                                    }
+                                    isLoading = false
+                                    if (result.success && !result.token.isNullOrEmpty()) {
+                                        val sharedPrefs = context.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE)
+                                        sharedPrefs.edit()
+                                            .putString("auth_token", result.token)
+                                            .putString("auth_username", result.username ?: username)
+                                            .apply()
+                                        message = "登录成功"; messageIsError = false
+                                        onLoginSuccess()
+                                    } else {
+                                        message = result.message; messageIsError = true
+                                    }
+                                } catch (e: Exception) {
+                                    isLoading = false
+                                    message = "登录失败: ${e.message}"; messageIsError = true
                                 }
                             }
                         }
                     },
-                    onForgotPassword = { screenMode = "forgot" },
+                    onForgotPassword = { screenMode = "forgot"; message = "" },
                     onSwitchToRegister = { screenMode = "register"; message = "" }
                 )
                 "register" -> RegisterContent(
@@ -117,19 +136,22 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                             else -> {
                                 scope.launch {
                                     isLoading = true
-                                    val result = withContext(Dispatchers.IO) {
-                                        ApiClient.register(username, password, email)
-                                    }
-                                    isLoading = false
-                                    if (result.success) {
-                                        message = "注册成功，请登录"
-                                        messageIsError = false
-                                        screenMode = "login"
-                                        password = ""
-                                        confirmPassword = ""
-                                    } else {
-                                        message = result.message
-                                        messageIsError = true
+                                    message = ""
+                                    try {
+                                        val result = withContext(Dispatchers.IO) {
+                                            ApiClient.register(username, password, email)
+                                        }
+                                        isLoading = false
+                                        if (result.success) {
+                                            message = "注册成功，请登录"; messageIsError = false
+                                            screenMode = "login"
+                                            password = ""; confirmPassword = ""
+                                        } else {
+                                            message = result.message; messageIsError = true
+                                        }
+                                    } catch (e: Exception) {
+                                        isLoading = false
+                                        message = "注册失败: ${e.message}"; messageIsError = true
                                     }
                                 }
                             }
@@ -148,13 +170,18 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                             message = "请输入邮箱"; messageIsError = true
                         } else {
                             scope.launch {
-                                isLoading = true
-                                val result = withContext(Dispatchers.IO) {
-                                    ApiClient.forgotPassword(email, username)
+                                isLoading = true; message = ""
+                                try {
+                                    val result = withContext(Dispatchers.IO) {
+                                        ApiClient.forgotPassword(email, username)
+                                    }
+                                    isLoading = false
+                                    message = if (result.success) result.message else result.message
+                                    messageIsError = !result.success
+                                } catch (e: Exception) {
+                                    isLoading = false
+                                    message = "发送失败: ${e.message}"; messageIsError = true
                                 }
-                                isLoading = false
-                                message = if (result.success) "重置码已发送" else result.message
-                                messageIsError = !result.success
                             }
                         }
                     },
@@ -164,20 +191,22 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                             newPassword.length < 6 -> { message = "新密码至少6位"; messageIsError = true }
                             else -> {
                                 scope.launch {
-                                    isLoading = true
-                                    val result = withContext(Dispatchers.IO) {
-                                        ApiClient.resetPassword(resetToken, newPassword)
-                                    }
-                                    isLoading = false
-                                    if (result.success) {
-                                        message = "密码重置成功，请登录"
-                                        messageIsError = false
-                                        screenMode = "login"
-                                        resetToken = ""
-                                        newPassword = ""
-                                    } else {
-                                        message = result.message
-                                        messageIsError = true
+                                    isLoading = true; message = ""
+                                    try {
+                                        val result = withContext(Dispatchers.IO) {
+                                            ApiClient.resetPassword(resetToken, newPassword)
+                                        }
+                                        isLoading = false
+                                        if (result.success) {
+                                            message = "密码重置成功，请登录"; messageIsError = false
+                                            screenMode = "login"
+                                            resetToken = ""; newPassword = ""
+                                        } else {
+                                            message = result.message; messageIsError = true
+                                        }
+                                    } catch (e: Exception) {
+                                        isLoading = false
+                                        message = "重置失败: ${e.message}"; messageIsError = true
                                     }
                                 }
                             }
@@ -197,6 +226,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
             }
+            Spacer(modifier = Modifier.height(40.dp))
         }
     }
 }
@@ -427,37 +457,31 @@ private fun AuthTextField(
 ) {
     Column {
         Text(label, fontSize = 13.sp, color = TextSecondary, modifier = Modifier.padding(bottom = 6.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(BgWhite)
-        ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.fillMaxSize(),
-                textStyle = TextStyle(fontSize = 15.sp, color = TextPrimary),
-                keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-                visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
-                trailingIcon = if (onTogglePassword != null) {
-                    {
-                        Text(
-                            if (isPassword) "显示" else "隐藏",
-                            fontSize = 13.sp,
-                            color = BluePrimary,
-                            modifier = Modifier.clickable { onTogglePassword() }
-                        )
-                    }
-                } else null,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = BluePrimary,
-                    unfocusedBorderColor = BorderLight,
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent
-                )
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            textStyle = TextStyle(fontSize = 15.sp, color = TextPrimary),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+            trailingIcon = if (onTogglePassword != null) {
+                {
+                    Text(
+                        if (isPassword) "显示" else "隐藏",
+                        fontSize = 13.sp,
+                        color = BluePrimary,
+                        modifier = Modifier.clickable { onTogglePassword() }
+                    )
+                }
+            } else null,
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = BluePrimary,
+                unfocusedBorderColor = BorderLight,
+                focusedContainerColor = BgWhite,
+                unfocusedContainerColor = BgWhite
             )
-        }
+        )
     }
 }
