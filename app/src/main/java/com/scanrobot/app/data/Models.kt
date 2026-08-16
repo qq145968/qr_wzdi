@@ -37,6 +37,8 @@ data class AppInfo(
     val announcement: String = "",
     val maintenanceMode: Boolean = false,
     val registrationRequired: Boolean = true,
+    val captchaEnabled: Boolean = false,
+    val splashScreenUrl: String = "",
     val appName: String = "扫码机器人",
     val appDescription: String = "让手机变成扫码枪",
     val latestVersion: VersionInfo? = null,
@@ -58,7 +60,13 @@ data class AppMessage(
     val title: String = "",
     val content: String = "",
     val type: String = "system",
-    val createdAt: String = ""
+    val createdAt: String = "",
+    val read: Boolean = false
+)
+
+data class CaptchaResult(
+    val captchaId: String = "",
+    val captchaImage: String = ""
 )
 
 val scanModeOptions = listOf(

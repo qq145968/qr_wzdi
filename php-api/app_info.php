@@ -17,7 +17,17 @@ function getSetting($key, $default = '') {
 
 $announcement = getSetting('announcement', '欢迎使用扫码机器人');
 $maintenanceMode = getSetting('maintenance_mode', '0') === '1';
-$registrationRequired = getSetting('registration_required', '1') === '1';
+$registrationRequired = getSetting('registration_required', getSetting('app_registration_enabled', '1')) === '1';
+$captchaEnabled = getSetting('app_verification_enabled', getSetting('captcha_enabled', '0')) === '1';
+$splashImage = getSetting('splash_image', getSetting('splash_screen_url', ''));
+$splashScreenUrl = '';
+if (!empty($splashImage)) {
+    if (strpos($splashImage, 'http') === 0) {
+        $splashScreenUrl = $splashImage;
+    } else {
+        $splashScreenUrl = 'https://qr.wzdi.cn' . (strpos($splashImage, '/') === 0 ? $splashImage : '/' . $splashImage);
+    }
+}
 $appName = getSetting('app_name', '扫码机器人');
 $appDescription = getSetting('app_description', '让手机变成扫码枪');
 
@@ -56,6 +66,8 @@ jsonResponse(true, 'ok', [
     'announcement' => $announcement,
     'maintenance_mode' => $maintenanceMode,
     'registration_required' => $registrationRequired,
+    'captcha_enabled' => $captchaEnabled,
+    'splash_screen_url' => $splashScreenUrl,
     'app_name' => $appName,
     'app_description' => $appDescription,
     'latest_version' => $latestVersion,

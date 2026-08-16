@@ -1,9 +1,13 @@
 package com.scanrobot.app.ui
 
 import android.content.Context
+import android.graphics.BitmapFactory
+import android.util.Base64
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -24,6 +29,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.scanrobot.app.data.AppInfo
+import com.scanrobot.app.data.CaptchaResult
 import com.scanrobot.app.network.ApiClient
 import com.scanrobot.app.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun AuthScreen(onLoginSuccess: () -> Unit) {
+fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
     var screenMode by remember { mutableStateOf("login") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -45,6 +52,19 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
     var messageIsError by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    var captchaResult by remember { mutableStateOf<CaptchaResult?>(null) }
+    var captchaCode by remember { mutableStateOf("") }
+    val captchaEnabled = appInfo?.captchaEnabled ?: false
+    val registrationRequired = appInfo?.registrationRequired ?: true
+
+    LaunchedEffect(screenMode, captchaEnabled) {
+        if (captchaEnabled && (screenMode == "login" || screenMode == "register")) {
+            scope.launch {
+                captchaResult = withContext(Dispatchers.IO) { ApiClient.fetchCaptcha() }
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -70,8 +90,8 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                     Text("SC", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("扫码机器人", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Text("让手机变成扫码枪", fontSize = 13.sp, color = Color.White.copy(alpha = 0.7f))
+                Text(appInfo?.appName ?: "扫码机器人", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(appInfo?.appDescription ?: "让手机变成扫码枪", fontSize = 13.sp, color = Color.White.copy(alpha = 0.7f))
             }
         }
 
@@ -82,9 +102,20 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                     password = password, onPasswordChange = { password = it },
                     showPassword = showPassword, onTogglePassword = { showPassword = !showPassword },
                     isLoading = isLoading,
+                    captchaEnabled = captchaEnabled,
+                    captchaResult = captchaResult,
+                    captchaCode = captchaCode,
+                    onCaptchaCodeChange = { captchaCode = it },
+                    onRefreshCaptcha = {
+                        scope.launch {
+                            captchaResult = withContext(Dispatchers.IO) { ApiClient.fetchCaptcha() }
+                        }
+                    },
                     onLogin = {
                         if (username.isBlank() || password.isBlank()) {
                             message = "请输入用户名和密码"; messageIsError = true
+                        } else if (captchaEnabled && captchaCode.isBlank()) {
+                            message = "请输入验证码"; messageIsError = true
                         } else {
                             scope.launch {
                                 isLoading = true
@@ -92,7 +123,11 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                 try {
                                     Log.d("AuthScreen", "Starting login for: $username")
                                     val result = withContext(Dispatchers.IO) {
-                                        ApiClient.login(username, password)
+                                        ApiClient.login(
+                                            username, password,
+                                            captchaResult?.captchaId ?: "",
+                                            captchaCode
+                                        )
                                     }
                                     Log.d("AuthScreen", "Login result: success=${result.success}, msg=${result.message}")
                                     if (result.success && !result.token.isNullOrEmpty()) {
@@ -105,6 +140,10 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                         onLoginSuccess()
                                     } else {
                                         message = result.message; messageIsError = true
+                                        if (captchaEnabled) {
+                                            captchaCode = ""
+                                            captchaResult = withContext(Dispatchers.IO) { ApiClient.fetchCaptcha() }
+                                        }
                                     }
                                 } catch (e: Throwable) {
                                     Log.e("AuthScreen", "Login exception", e)
@@ -116,7 +155,14 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                         }
                     },
                     onForgotPassword = { screenMode = "forgot"; message = "" },
-                    onSwitchToRegister = { screenMode = "register"; message = "" }
+                    onSwitchToRegister = {
+                        if (registrationRequired) {
+                            screenMode = "register"; message = ""; captchaCode = ""
+                        } else {
+                            message = "当前已关闭注册"; messageIsError = true
+                        }
+                    },
+                    registrationRequired = registrationRequired
                 )
                 "register" -> RegisterContent(
                     username = username, onUsernameChange = { username = it },
@@ -125,12 +171,22 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                     email = email, onEmailChange = { email = it },
                     showPassword = showPassword, onTogglePassword = { showPassword = !showPassword },
                     isLoading = isLoading,
+                    captchaEnabled = captchaEnabled,
+                    captchaResult = captchaResult,
+                    captchaCode = captchaCode,
+                    onCaptchaCodeChange = { captchaCode = it },
+                    onRefreshCaptcha = {
+                        scope.launch {
+                            captchaResult = withContext(Dispatchers.IO) { ApiClient.fetchCaptcha() }
+                        }
+                    },
                     onRegister = {
                         when {
                             username.length < 3 -> { message = "用户名至少3个字符"; messageIsError = true }
                             password.length < 6 -> { message = "密码至少6位"; messageIsError = true }
                             password != confirmPassword -> { message = "两次密码不一致"; messageIsError = true }
                             email.isBlank() || !email.contains("@") -> { message = "请输入有效邮箱"; messageIsError = true }
+                            captchaEnabled && captchaCode.isBlank() -> { message = "请输入验证码"; messageIsError = true }
                             else -> {
                                 scope.launch {
                                     isLoading = true
@@ -138,15 +194,23 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                     try {
                                         Log.d("AuthScreen", "Starting register for: $username")
                                         val result = withContext(Dispatchers.IO) {
-                                            ApiClient.register(username, password, email)
+                                            ApiClient.register(
+                                                username, password, email,
+                                                captchaResult?.captchaId ?: "",
+                                                captchaCode
+                                            )
                                         }
                                         Log.d("AuthScreen", "Register result: success=${result.success}")
                                         if (result.success) {
                                             message = "注册成功，请登录"; messageIsError = false
                                             screenMode = "login"
-                                            password = ""; confirmPassword = ""
+                                            password = ""; confirmPassword = ""; captchaCode = ""
                                         } else {
                                             message = result.message; messageIsError = true
+                                            if (captchaEnabled) {
+                                                captchaCode = ""
+                                                captchaResult = withContext(Dispatchers.IO) { ApiClient.fetchCaptcha() }
+                                            }
                                         }
                                     } catch (e: Throwable) {
                                         Log.e("AuthScreen", "Register exception", e)
@@ -158,7 +222,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                             }
                         }
                     },
-                    onSwitchToLogin = { screenMode = "login"; message = "" }
+                    onSwitchToLogin = { screenMode = "login"; message = ""; captchaCode = "" }
                 )
                 "forgot" -> ForgotPasswordContent(
                     username = username, onUsernameChange = { username = it },
@@ -239,14 +303,90 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
 }
 
 @Composable
+private fun CaptchaSection(
+    captchaResult: CaptchaResult?,
+    captchaCode: String,
+    onCaptchaCodeChange: (String) -> Unit,
+    onRefreshCaptcha: () -> Unit
+) {
+    Column {
+        Text("验证码", fontSize = 13.sp, color = TextSecondary, modifier = Modifier.padding(bottom = 6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = captchaCode,
+                onValueChange = onCaptchaCodeChange,
+                modifier = Modifier.weight(1f),
+                textStyle = TextStyle(fontSize = 15.sp, color = TextPrimary),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                shape = RoundedCornerShape(10.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = BluePrimary,
+                    unfocusedBorderColor = BorderLight,
+                    focusedContainerColor = BgWhite,
+                    unfocusedContainerColor = BgWhite
+                )
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            if (captchaResult != null && captchaResult.captchaImage.isNotEmpty()) {
+                val imageStr = captchaResult.captchaImage
+                val base64Part = if (imageStr.contains(",")) imageStr.substringAfter(",") else imageStr
+                val imageBytes = try {
+                    Base64.decode(base64Part, Base64.DEFAULT)
+                } catch (e: Throwable) {
+                    null
+                }
+                if (imageBytes != null) {
+                    val bitmap = remember(imageBytes) {
+                        BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                    }
+                    if (bitmap != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 100.dp, height = 44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(BgWhite)
+                                .border(0.5.dp, BorderLight, RoundedCornerShape(8.dp))
+                                .clickable { onRefreshCaptcha() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                bitmap = bitmap.asImageBitmap(),
+                                contentDescription = "验证码",
+                                modifier = Modifier.fillMaxSize().padding(2.dp)
+                            )
+                        }
+                    } else {
+                        TextButton(onClick = onRefreshCaptcha) { Text("刷新", fontSize = 13.sp) }
+                    }
+                } else {
+                    TextButton(onClick = onRefreshCaptcha) { Text("刷新", fontSize = 13.sp) }
+                }
+            } else {
+                TextButton(onClick = onRefreshCaptcha) { Text("加载中", fontSize = 13.sp) }
+            }
+        }
+    }
+}
+
+@Composable
 private fun LoginContent(
     username: String, onUsernameChange: (String) -> Unit,
     password: String, onPasswordChange: (String) -> Unit,
     showPassword: Boolean, onTogglePassword: () -> Unit,
     isLoading: Boolean,
+    captchaEnabled: Boolean,
+    captchaResult: CaptchaResult?,
+    captchaCode: String,
+    onCaptchaCodeChange: (String) -> Unit,
+    onRefreshCaptcha: () -> Unit,
     onLogin: () -> Unit,
     onForgotPassword: () -> Unit,
-    onSwitchToRegister: () -> Unit
+    onSwitchToRegister: () -> Unit,
+    registrationRequired: Boolean
 ) {
     Text("登录", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
     Spacer(modifier = Modifier.height(24.dp))
@@ -262,6 +402,12 @@ private fun LoginContent(
         label = "密码", keyboardType = KeyboardType.Password,
         isPassword = !showPassword, onTogglePassword = onTogglePassword
     )
+
+    if (captchaEnabled) {
+        Spacer(modifier = Modifier.height(16.dp))
+        CaptchaSection(captchaResult, captchaCode, onCaptchaCodeChange, onRefreshCaptcha)
+    }
+
     Spacer(modifier = Modifier.height(8.dp))
 
     Row(
@@ -292,17 +438,27 @@ private fun LoginContent(
     }
     Spacer(modifier = Modifier.height(16.dp))
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center
-    ) {
-        Text("还没有账号？", fontSize = 14.sp, color = TextSecondary)
+    if (registrationRequired) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text("还没有账号？", fontSize = 14.sp, color = TextSecondary)
+            Text(
+                "立即注册",
+                fontSize = 14.sp,
+                color = BluePrimary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { onSwitchToRegister() }
+            )
+        }
+    } else {
         Text(
-            "立即注册",
-            fontSize = 14.sp,
-            color = BluePrimary,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.clickable { onSwitchToRegister() }
+            "当前已关闭注册，如需账号请联系管理员",
+            fontSize = 13.sp,
+            color = TextSecondary,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
     }
 }
@@ -315,6 +471,11 @@ private fun RegisterContent(
     email: String, onEmailChange: (String) -> Unit,
     showPassword: Boolean, onTogglePassword: () -> Unit,
     isLoading: Boolean,
+    captchaEnabled: Boolean,
+    captchaResult: CaptchaResult?,
+    captchaCode: String,
+    onCaptchaCodeChange: (String) -> Unit,
+    onRefreshCaptcha: () -> Unit,
     onRegister: () -> Unit,
     onSwitchToLogin: () -> Unit
 ) {
@@ -345,6 +506,12 @@ private fun RegisterContent(
         label = "确认密码", keyboardType = KeyboardType.Password,
         isPassword = !showPassword
     )
+
+    if (captchaEnabled) {
+        Spacer(modifier = Modifier.height(16.dp))
+        CaptchaSection(captchaResult, captchaCode, onCaptchaCodeChange, onRefreshCaptcha)
+    }
+
     Spacer(modifier = Modifier.height(24.dp))
 
     Button(

@@ -2,6 +2,7 @@ package com.scanrobot.app.network
 
 import com.scanrobot.app.data.AppInfo
 import com.scanrobot.app.data.AppMessage
+import com.scanrobot.app.data.CaptchaResult
 import com.scanrobot.app.data.VersionInfo
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -22,21 +23,49 @@ object ApiClient {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-    fun register(username: String, password: String, email: String): ApiResult {
+    fun register(username: String, password: String, email: String, captchaId: String = "", captchaCode: String = ""): ApiResult {
         val json = JSONObject().apply {
             put("username", username)
             put("password", password)
             put("email", email)
+            if (captchaId.isNotEmpty()) {
+                put("captcha_id", captchaId)
+                put("captcha_code", captchaCode)
+            }
         }
         return postRequest("/register.php", json)
     }
 
-    fun login(username: String, password: String): ApiResult {
+    fun login(username: String, password: String, captchaId: String = "", captchaCode: String = ""): ApiResult {
         val json = JSONObject().apply {
             put("username", username)
             put("password", password)
+            if (captchaId.isNotEmpty()) {
+                put("captcha_id", captchaId)
+                put("captcha_code", captchaCode)
+            }
         }
         return postRequest("/login.php", json)
+    }
+
+    fun fetchCaptcha(): CaptchaResult? {
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/captcha.php")
+                .get()
+                .build()
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string() ?: return null
+            val json = JSONObject(responseBody)
+            if (!json.optBoolean("success", false)) return null
+            val data = json.optJSONObject("data") ?: return null
+            CaptchaResult(
+                captchaId = data.optString("captcha_id", ""),
+                captchaImage = data.optString("captcha_image", "")
+            )
+        } catch (e: Throwable) {
+            null
+        }
     }
 
     fun forgotPassword(email: String, username: String): ApiResult {
@@ -96,6 +125,8 @@ object ApiClient {
                 announcement = data.optString("announcement", "欢迎使用扫码机器人"),
                 maintenanceMode = data.optBoolean("maintenance_mode", false),
                 registrationRequired = data.optBoolean("registration_required", true),
+                captchaEnabled = data.optBoolean("captcha_enabled", false),
+                splashScreenUrl = data.optString("splash_screen_url", ""),
                 appName = data.optString("app_name", "扫码机器人"),
                 appDescription = data.optString("app_description", "让手机变成扫码枪"),
                 latestVersion = versionInfo,

@@ -1,5 +1,13 @@
 package com.scanrobot.app.ui
 
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.database.Cursor
+import android.net.Uri
+import android.os.Environment
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -25,6 +33,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.CenterFocusStrong
@@ -37,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,11 +64,12 @@ import com.scanrobot.app.network.ApiClient
 import com.scanrobot.app.ui.theme.*
 import com.scanrobot.app.viewmodel.ScanViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun HomeScreen(viewModel: ScanViewModel) {
+fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
     var activeTab by remember { mutableStateOf("scan") }
     var showModePicker by remember { mutableStateOf(false) }
     var showTypePicker by remember { mutableStateOf(false) }
@@ -68,12 +79,16 @@ fun HomeScreen(viewModel: ScanViewModel) {
     var showMessageDialog by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE) }
+    var readMessageIds by remember { mutableStateOf(sharedPrefs.getStringSet("read_message_ids", emptySet()) ?: emptySet()) }
 
     LaunchedEffect(Unit) {
         scope.launch {
             val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo() }
             if (info != null) {
-                appInfo = info
+                val unreadCount = info.messages.count { it.id !in readMessageIds }
+                appInfo = info.copy(unreadCount = unreadCount)
                 val currentCode = BuildConfig.VERSION_CODE
                 val latestVersion = info.latestVersion
                 if (latestVersion != null && latestVersion.versionCode > currentCode) {
@@ -102,7 +117,8 @@ fun HomeScreen(viewModel: ScanViewModel) {
                 "profile" -> ProfileTab(
                     viewModel = viewModel,
                     appInfo = appInfo,
-                    onMessageClick = { showMessageDialog = true }
+                    onMessageClick = { showMessageDialog = true },
+                    onLogout = onLogout
                 )
             }
         }
@@ -154,9 +170,18 @@ fun HomeScreen(viewModel: ScanViewModel) {
     }
 
     if (showMessageDialog && appInfo != null) {
+        val messages = appInfo!!.messages.map { msg ->
+            msg.copy(read = msg.id in readMessageIds)
+        }
         MessageListDialog(
-            messages = appInfo!!.messages,
-            onDismiss = { showMessageDialog = false }
+            messages = messages,
+            onDismiss = {
+                val newReadIds = (readMessageIds + appInfo!!.messages.map { it.id }).toSet()
+                sharedPrefs.edit().putStringSet("read_message_ids", newReadIds).commit()
+                readMessageIds = newReadIds
+                appInfo = appInfo!!.copy(unreadCount = 0)
+                showMessageDialog = false
+            }
         )
     }
 
@@ -483,10 +508,13 @@ private fun ManageTab(viewModel: ScanViewModel) {
 private fun ProfileTab(
     viewModel: ScanViewModel,
     appInfo: AppInfo?,
-    onMessageClick: () -> Unit
+    onMessageClick: () -> Unit,
+    onLogout: () -> Unit
 ) {
     val batches by viewModel.batches.collectAsState()
     val settings by viewModel.settings.collectAsState()
+    val sharedPrefs = LocalContext.current.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE)
+    val username = sharedPrefs.getString("auth_username", "扫码机器人") ?: "扫码机器人"
 
     val totalCount = batches.sumOf { it.count }
 
@@ -525,6 +553,22 @@ private fun ProfileTab(
                         )
                     }
                 }
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.2f))
+                        .clickable { onLogout() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Logout,
+                        contentDescription = "退出登录",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
 
             Column(
@@ -548,7 +592,7 @@ private fun ProfileTab(
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("扫码机器人", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(username, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 Text("v${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
             }
         }
@@ -614,7 +658,29 @@ private fun ProfileTab(
 private fun MessageListDialog(messages: List<AppMessage>, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("消息通知", fontWeight = FontWeight.Bold) },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("消息通知", fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.width(8.dp))
+                val unread = messages.count { !it.read }
+                if (unread > 0) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(DangerRed),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (unread > 99) "99+" else unread.toString(),
+                            fontSize = 10.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        },
         text = {
             if (messages.isEmpty()) {
                 Text("暂无消息", color = TextSecondary, modifier = Modifier.padding(vertical = 16.dp))
@@ -628,15 +694,35 @@ private fun MessageListDialog(messages: List<AppMessage>, onDismiss: () -> Unit)
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(BgLight)
+                                .background(if (msg.read) BgLight else Color(0xFFE8F0FE))
                                 .padding(12.dp)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(msg.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                                Text(msgTypeText(msg.type), fontSize = 12.sp, color = TextSecondary)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (!msg.read) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(DangerRed)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                    }
+                                    Text(
+                                        msg.title,
+                                        fontSize = 15.sp,
+                                        fontWeight = if (msg.read) FontWeight.Normal else FontWeight.SemiBold,
+                                        color = TextPrimary
+                                    )
+                                }
+                                Text(
+                                    msgTypeText(msg.type),
+                                    fontSize = 12.sp,
+                                    color = if (msg.read) TextSecondary else BluePrimary
+                                )
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(msg.content, fontSize = 14.sp, color = TextSecondary, lineHeight = 20.sp)
@@ -648,49 +734,188 @@ private fun MessageListDialog(messages: List<AppMessage>, onDismiss: () -> Unit)
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            TextButton(onClick = onDismiss) { Text("全部已读并关闭") }
         }
     )
 }
 
 @Composable
 private fun VersionUpdateDialog(version: VersionInfo, onDismiss: () -> Unit) {
-    if (version.forceUpdate) {
-        AlertDialog(
-            onDismissRequest = { },
-            title = { Text("发现新版本", fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    Text("v${version.versionName}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = BluePrimary)
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var downloadState by remember { mutableStateOf("idle") }
+    var downloadProgress by remember { mutableStateOf(0) }
+    var downloadId by remember { mutableStateOf(-1L) }
+    var statusMessage by remember { mutableStateOf("") }
+
+    DisposableEffect(downloadState) {
+        if (downloadState != "downloading") return@DisposableEffect onDispose {}
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) ?: -1L
+                if (id == downloadId) {
+                    val dm = ctx?.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+                    val query = DownloadManager.Query().setFilterById(id)
+                    val cursor = dm?.query(query)
+                    cursor?.use {
+                        if (it.moveToFirst()) {
+                            val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                            if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                                downloadState = "complete"
+                                val uri = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+                                statusMessage = "下载完成，正在安装..."
+                                val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(Uri.parse(uri), "application/vnd.android.package-archive")
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(installIntent)
+                            } else if (status == DownloadManager.STATUS_FAILED) {
+                                downloadState = "failed"
+                                statusMessage = "下载失败，请重试"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+        onDispose {
+            try { context.unregisterReceiver(receiver) } catch (_: Throwable) {}
+        }
+    }
+
+    LaunchedEffect(downloadState) {
+        if (downloadState == "downloading" && downloadId != -1L) {
+            while (downloadState == "downloading") {
+                delay(500)
+                val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+                val query = DownloadManager.Query().setFilterById(downloadId)
+                val cursor = dm?.query(query)
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        val downloaded = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                        val total = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                        if (total > 0) {
+                            downloadProgress = ((downloaded * 100) / total).toInt()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun startDownload() {
+        val url = version.downloadUrl
+        if (url.isBlank()) {
+            statusMessage = "下载地址无效"
+            downloadState = "failed"
+            return
+        }
+        try {
+            val request = DownloadManager.Request(Uri.parse(url)).apply {
+                setTitle("扫码机器人 v${version.versionName}")
+                setDescription("正在下载更新...")
+                setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, "scan-robot-v${version.versionName}.apk")
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
+                setMimeType("application/vnd.android.package-archive")
+            }
+            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+            downloadId = dm?.enqueue(request) ?: -1L
+            downloadState = "downloading"
+            downloadProgress = 0
+            statusMessage = ""
+        } catch (e: Throwable) {
+            statusMessage = "下载失败: ${e.message}"
+            downloadState = "failed"
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!version.forceUpdate && downloadState != "downloading") onDismiss() },
+        title = { Text("发现新版本", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text("v${version.versionName}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = BluePrimary)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    version.updateContent.ifEmpty { "优化体验，修复已知问题" },
+                    fontSize = 14.sp, color = TextSecondary, lineHeight = 20.sp
+                )
+
+                if (downloadState == "downloading") {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    LinearProgressIndicator(
+                        progress = { downloadProgress / 100f },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = BluePrimary,
+                        trackColor = Color(0xFFE0E0E0)
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(version.updateContent.ifEmpty { "请更新到最新版本" }, fontSize = 14.sp, color = TextSecondary, lineHeight = 20.sp)
+                    Text(
+                        "下载进度: $downloadProgress%",
+                        fontSize = 13.sp,
+                        color = TextSecondary,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+
+                if (downloadState == "complete") {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(statusMessage, fontSize = 13.sp, color = Color(0xFF4CAF50))
+                }
+
+                if (downloadState == "failed") {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(statusMessage, fontSize = 13.sp, color = DangerRed)
+                }
+
+                if (version.forceUpdate && downloadState == "idle") {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("此版本为强制更新，请下载后安装", fontSize = 13.sp, color = DangerRed)
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { onDismiss() }) { Text("去下载") }
             }
-        )
-    } else {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("发现新版本", fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    Text("v${version.versionName}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = BluePrimary)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(version.updateContent.ifEmpty { "优化体验，修复已知问题" }, fontSize = 14.sp, color = TextSecondary, lineHeight = 20.sp)
+        },
+        confirmButton = {
+            when (downloadState) {
+                "idle" -> {
+                    TextButton(onClick = { startDownload() }) {
+                        Text("去下载", fontWeight = FontWeight.SemiBold)
+                    }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = onDismiss) { Text("稍后") }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismiss) { Text("立即更新") }
+                "downloading" -> {
+                    TextButton(onClick = {}, enabled = false) {
+                        Text("下载中...")
+                    }
+                }
+                "complete" -> {
+                    TextButton(onClick = {
+                        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+                        val query = DownloadManager.Query().setFilterById(downloadId)
+                        val cursor = dm?.query(query)
+                        cursor?.use {
+                            if (it.moveToFirst()) {
+                                val uri = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+                                val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(Uri.parse(uri), "application/vnd.android.package-archive")
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(installIntent)
+                            }
+                        }
+                    }) { Text("安装") }
+                }
+                "failed" -> {
+                    TextButton(onClick = { startDownload() }) { Text("重试") }
+                }
             }
-        )
-    }
+        },
+        dismissButton = {
+            if (!version.forceUpdate && downloadState != "downloading") {
+                TextButton(onClick = onDismiss) { Text("稍后") }
+            }
+        }
+    )
 }
 
 @Composable

@@ -27,6 +27,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.scanrobot.app.data.AppInfo
+import com.scanrobot.app.network.ApiClient
 import com.scanrobot.app.ui.AuthScreen
 import com.scanrobot.app.ui.DetailScreen
 import com.scanrobot.app.ui.HomeScreen
@@ -34,12 +37,15 @@ import com.scanrobot.app.ui.ScannerScreen
 import com.scanrobot.app.ui.theme.ScanRobotTheme
 import com.scanrobot.app.viewmodel.ScanViewModel
 import com.scanrobot.app.viewmodel.Screen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: ScanViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         val sharedPrefs = getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE)
@@ -48,7 +54,6 @@ class MainActivity : ComponentActivity() {
         // Check for crash log
         val crashPrefs = getSharedPreferences("crash_log", Context.MODE_PRIVATE)
         val lastCrash = crashPrefs.getString("last_crash", null)
-        val crashTime = crashPrefs.getLong("crash_time", 0L)
 
         setContent {
             ScanRobotTheme {
@@ -58,6 +63,12 @@ class MainActivity : ComponentActivity() {
                 var isLoggedIn by remember { mutableStateOf(savedToken != null) }
                 var lastBackPress by remember { mutableLongStateOf(0L) }
                 var showCrashDialog by remember { mutableStateOf(lastCrash != null) }
+                var authAppInfo by remember { mutableStateOf<AppInfo?>(null) }
+
+                LaunchedEffect(Unit) {
+                    val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo() }
+                    authAppInfo = info
+                }
 
                 // Show crash dialog if there was a crash
                 if (showCrashDialog && lastCrash != null) {
@@ -128,14 +139,24 @@ class MainActivity : ComponentActivity() {
                 Box(modifier = Modifier.fillMaxSize()) {
                     if (isLoggedIn) {
                         when (val screen = currentScreen) {
-                            is Screen.Home -> HomeScreen(viewModel)
+                            is Screen.Home -> HomeScreen(
+                                viewModel = viewModel,
+                                onLogout = {
+                                    sharedPrefs.edit()
+                                        .remove("auth_token")
+                                        .remove("auth_username")
+                                        .commit()
+                                    isLoggedIn = false
+                                }
+                            )
                             is Screen.Scanner -> ScannerScreen(viewModel)
                             is Screen.Detail -> DetailScreen(viewModel, screen.batchId)
                         }
                     } else {
-                        AuthScreen {
-                            isLoggedIn = true
-                        }
+                        AuthScreen(
+                            onLoginSuccess = { isLoggedIn = true },
+                            appInfo = authAppInfo
+                        )
                     }
 
                     SnackbarHost(
