@@ -41,6 +41,11 @@ data class AppInfo(
     val splashScreenUrl: String = "",
     val appName: String = "扫码机器人",
     val appDescription: String = "让手机变成扫码枪",
+    val splashAppName: String = "二维码管理系统",
+    val splashAppDescription: String = "专业的二维码管理工具",
+    val splashBgColor: String = "#1677ff",
+    val homeAppName: String = "扫码机器人",
+    val homeAppDescription: String = "让手机变成扫码枪",
     val latestVersion: VersionInfo? = null,
     val messages: List<AppMessage> = emptyList(),
     val unreadCount: Int = 0
