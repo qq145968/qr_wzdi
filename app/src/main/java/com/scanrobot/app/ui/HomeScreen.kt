@@ -8,6 +8,10 @@ import android.content.IntentFilter
 import android.database.Cursor
 import android.net.Uri
 import android.os.Environment
+import java.io.File
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -45,6 +49,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -52,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.scanrobot.app.BuildConfig
 import com.scanrobot.app.data.AppInfo
 import com.scanrobot.app.data.AppMessage
@@ -225,7 +232,7 @@ private fun AnnouncementBar(text: String) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -233,10 +240,11 @@ private fun AnnouncementBar(text: String) {
                 fontSize = 14.sp,
                 modifier = Modifier.padding(end = 6.dp)
             )
+            // 高度由内部文本自动撑开，不做固定height裁剪
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(20.dp)
+                    .wrapContentHeight()
                     .clip(RoundedCornerShape(4.dp))
             ) {
                 // 第一份文本：从原始位置向左滚到 -distance（完全滚出左边）
@@ -251,7 +259,7 @@ private fun AnnouncementBar(text: String) {
                     },
                     modifier = Modifier
                         .offset { IntOffset(x = offsetX.toInt(), y = 0) }
-                        .padding(vertical = 1.dp)
+                        .padding(vertical = 2.dp)
                 )
                 // 第二份文本：从 distance（右边外）同步向左滚到 0，实现无缝衔接
                 if (textWidthPx > 0f) {
@@ -263,7 +271,7 @@ private fun AnnouncementBar(text: String) {
                         softWrap = false,
                         modifier = Modifier
                             .offset { IntOffset(x = (offsetX + distance).toInt(), y = 0) }
-                            .padding(vertical = 1.dp)
+                            .padding(vertical = 2.dp)
                     )
                 }
             }
@@ -539,8 +547,34 @@ private fun ProfileTab(
 ) {
     val batches by viewModel.batches.collectAsState()
     val settings by viewModel.settings.collectAsState()
-    val sharedPrefs = LocalContext.current.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE)
+    val context = LocalContext.current
+    val sharedPrefs = context.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE)
     val username = sharedPrefs.getString("auth_username", "扫码机器人") ?: "扫码机器人"
+    var avatarPath by remember { mutableStateOf(sharedPrefs.getString("user_avatar_path", null)) }
+
+    val scope = rememberCoroutineScope()
+    val photoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        // 复制到应用私有目录并持久化 path
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                val dest = File(context.filesDir, "avatars").apply { mkdirs() }
+                val target = File(dest, "user_avatar_${System.currentTimeMillis()}.jpg")
+                context.contentResolver.openInputStream(uri).use { input ->
+                    if (input == null) error("无法读取图片")
+                    target.outputStream().use { output -> input.copyTo(output) }
+                }
+                // 删除旧头像（避免残留）
+                avatarPath?.let { old -> File(old).takeIf { it.exists() && it.parentFile?.name == "avatars" }?.delete() }
+                avatarPath = target.absolutePath
+                sharedPrefs.edit().putString("user_avatar_path", avatarPath).apply()
+            }.onFailure {
+                withContext(Dispatchers.Main) { viewModel.showToast("头像设置失败") }
+            }
+        }
+    }
 
     val totalCount = batches.sumOf { it.count }
 
@@ -603,23 +637,50 @@ private fun ProfileTab(
                     .padding(top = 4.dp, bottom = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                val avPath = avatarPath
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(72.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.2f)),
+                        .background(Color.White.copy(alpha = 0.2f))
+                        .clickable {
+                            photoPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Filled.Person,
-                        contentDescription = "头像",
-                        tint = Color.White,
-                        modifier = Modifier.size(32.dp)
-                    )
+                    if (avPath != null && File(avPath).exists()) {
+                        AsyncImage(
+                            model = avPath,
+                            contentDescription = "头像",
+                            placeholder = ColorPainter(Color.White.copy(alpha = 0.1f)),
+                            error = ColorPainter(Color.White.copy(alpha = 0.1f)),
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize().clip(CircleShape)
+                        )
+                    } else {
+                        Icon(
+                            Icons.Filled.Person,
+                            contentDescription = "头像",
+                            tint = Color.White,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "点击更换头像",
+                    fontSize = 11.sp,
+                    color = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.clickable {
+                        photoPicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+                )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(username, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Text("v${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
             }
         }
 
