@@ -253,6 +253,7 @@ private fun TopBarButton(onClick: () -> Unit) {
 private fun ResultHeader(viewModel: ScanViewModel) {
     val flashOn by viewModel.flashOn.collectAsState()
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    var showClearConfirm by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
@@ -290,6 +291,14 @@ private fun ResultHeader(viewModel: ScanViewModel) {
         }
         Row {
             Text(
+                "清空",
+                fontSize = 14.sp,
+                color = RedPrimary,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.clickable { showClearConfirm = true }
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+            Text(
                 "复制",
                 fontSize = 14.sp,
                 color = BluePrimary,
@@ -320,6 +329,30 @@ private fun ResultHeader(viewModel: ScanViewModel) {
         }
     }
     Divider(thickness = 0.5.dp, color = BorderLight)
+
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text("清空扫码列表", fontWeight = FontWeight.SemiBold) },
+            text = { Text("确定要清空当前扫码列表中的所有记录吗？此操作无法撤销。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearConfirm = false
+                    val count = viewModel.clearAll()
+                    if (count > 0) {
+                        viewModel.showToast("已清空 $count 条记录")
+                    } else {
+                        viewModel.showToast("暂无记录可清空")
+                    }
+                }, colors = ButtonDefaults.textButtonColors(contentColor = RedPrimary)) {
+                    Text("确定清空")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) { Text("取消") }
+            }
+        )
+    }
 }
 
 @Composable
