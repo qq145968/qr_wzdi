@@ -293,7 +293,7 @@ private fun ResultHeader(viewModel: ScanViewModel) {
             Text(
                 "清空",
                 fontSize = 14.sp,
-                color = RedPrimary,
+                color = Color(0xFFFF3B30),
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.clickable { showClearConfirm = true }
             )
@@ -336,15 +336,20 @@ private fun ResultHeader(viewModel: ScanViewModel) {
             title = { Text("清空扫码列表", fontWeight = FontWeight.SemiBold) },
             text = { Text("确定要清空当前扫码列表中的所有记录吗？此操作无法撤销。") },
             confirmButton = {
-                TextButton(onClick = {
-                    showClearConfirm = false
-                    val count = viewModel.clearAll()
-                    if (count > 0) {
-                        viewModel.showToast("已清空 $count 条记录")
-                    } else {
-                        viewModel.showToast("暂无记录可清空")
-                    }
-                }, colors = ButtonDefaults.textButtonColors(contentColor = RedPrimary)) {
+                TextButton(
+                    onClick = {
+                        showClearConfirm = false
+                        val count = viewModel.clearAll()
+                        if (count > 0) {
+                            viewModel.showToast("已清空 $count 条记录")
+                        } else {
+                            viewModel.showToast("暂无记录可清空")
+                        }
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                        contentColor = Color(0xFFFF3B30)
+                    )
+                ) {
                     Text("确定清空")
                 }
             },
