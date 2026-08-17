@@ -331,6 +331,7 @@ private fun ResultHeader(viewModel: ScanViewModel) {
     Divider(thickness = 0.5.dp, color = BorderLight)
 
     if (showClearConfirm) {
+        // 清空确认对话框（避免误触）
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
             title = { Text("清空扫码列表", fontWeight = FontWeight.SemiBold) },
