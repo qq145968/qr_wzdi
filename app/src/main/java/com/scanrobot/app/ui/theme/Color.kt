@@ -1,4 +1,4 @@
-package com.scanrobot.app.ui.theme
+﻿package com.scanrobot.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
@@ -15,3 +15,4 @@ val WarningAmber = Color(0xFFD48806)
 val WarningBg = Color(0xFFFFF7E6)
 val TealBg = Color(0xFFE6FFFB)
 val GoldYellow = Color(0xFFFFD700)
+val RedPrimary = Color(0xFFFF3B30)

@@ -1,4 +1,4 @@
-package com.scanrobot.app.viewmodel
+﻿package com.scanrobot.app.viewmodel
 
 import android.app.Application
 import android.content.ContentValues
@@ -217,10 +217,18 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         loadBatches()
     }
 
-    fun clearAll() {
+    fun clearAllHistory() {
         store.clearAll()
         loadBatches()
         _scanList.value = emptyList()
+    }
+
+    fun clearAll(): Int {
+        val count = _scanList.value.size
+        if (count > 0) {
+            _scanList.value = emptyList()
+        }
+        return count
     }
 
     fun exportHistory(): String {

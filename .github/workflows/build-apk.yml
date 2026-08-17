@@ -30,6 +30,9 @@ jobs:
       run: chmod +x gradlew
 
     - name: Build Debug APK
+      env:
+        JAVA_OPTS: "-Xmx4096m -XX:MaxMetaspaceSize=512m"
+        GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=512m"
       run: ./gradlew assembleDebug --no-daemon --stacktrace
 
     - name: Upload APK

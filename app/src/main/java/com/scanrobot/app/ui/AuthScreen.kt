@@ -1,4 +1,4 @@
-package com.scanrobot.app.ui
+﻿package com.scanrobot.app.ui
 
 import android.content.Context
 import android.graphics.BitmapFactory
@@ -13,6 +13,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -87,7 +89,17 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
                         .background(Color.White.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("SC", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    val iconUrl = appInfo?.splashIconUrl
+                    if (!iconUrl.isNullOrEmpty()) {
+                        AsyncImage(
+                            model = iconUrl,
+                            contentDescription = "应用图标",
+                            modifier = Modifier.fillMaxSize().clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Text("SC", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(appInfo?.splashAppName ?: "二维码管理系统", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)

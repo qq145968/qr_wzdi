@@ -3,11 +3,13 @@ package com.scanrobot.app.network
 import com.scanrobot.app.data.AppInfo
 import com.scanrobot.app.data.AppMessage
 import com.scanrobot.app.data.CaptchaResult
+import com.scanrobot.app.data.UserProfile
 import com.scanrobot.app.data.VersionInfo
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import android.content.Context
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -132,14 +134,62 @@ object ApiClient {
                 splashAppName = data.optString("splash_app_name", data.optString("app_name", "二维码管理系统")),
                 splashAppDescription = data.optString("splash_app_description", data.optString("app_description", "专业的二维码管理工具")),
                 splashBgColor = data.optString("splash_bg_color", "#1677ff"),
+                splashIconUrl = data.optString("splash_icon_url", ""),
                 homeAppName = data.optString("home_app_name", data.optString("app_name", "扫码机器人")),
                 homeAppDescription = data.optString("home_app_description", data.optString("app_description", "让手机变成扫码枪")),
+                homeIconUrl = data.optString("home_icon_url", ""),
                 latestVersion = versionInfo,
                 messages = messages,
                 unreadCount = data.optInt("unread_count", 0)
             )
         } catch (e: Throwable) {
             null
+        }
+    }
+
+    fun getUserInfo(context: Context): UserProfile? {
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/../app_user.php")
+                .get()
+                .build()
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string() ?: return null
+            val json = JSONObject(responseBody)
+            if (!json.optBoolean("ok", false)) return null
+            val userJson = json.optJSONObject("user") ?: return null
+            UserProfile(
+                id = userJson.optInt("id", 0),
+                username = userJson.optString("username", ""),
+                email = userJson.optString("email", ""),
+                phone = userJson.optString("phone", ""),
+                avatar = userJson.optString("avatar", ""),
+                avatarUrl = userJson.optString("avatar_url", ""),
+                status = userJson.optInt("status", 1),
+                source = userJson.optString("source", ""),
+                loginCount = userJson.optInt("login_count", 0),
+                lastLogin = userJson.optString("last_login", ""),
+                createdAt = userJson.optString("created_at", "")
+            )
+        } catch (e: Throwable) {
+            null
+        }
+    }
+
+    fun uploadAvatar(context: Context, avatarBase64: String): Boolean {
+        return try {
+            val sharedPrefs = context.getSharedPreferences("scan_robot_prefs", android.content.Context.MODE_PRIVATE)
+            val userId = sharedPrefs.getInt("auth_user_id", 0)
+            if (userId <= 0) return false
+
+            val json = JSONObject().apply {
+                put("action", "upload_avatar")
+                put("avatar_base64", avatarBase64)
+            }
+            val result = postRequest("../app_user.php", json)
+            result.success
+        } catch (e: Throwable) {
+            false
         }
     }
 
