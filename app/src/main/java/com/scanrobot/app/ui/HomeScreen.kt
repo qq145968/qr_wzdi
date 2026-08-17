@@ -7,51 +7,27 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.database.Cursor
 import android.net.Uri
-import android.util.Base64
 import android.os.Environment
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.material.icons.Icons
@@ -82,23 +58,15 @@ import com.scanrobot.app.data.AppMessage
 import com.scanrobot.app.data.ScanBatch
 import com.scanrobot.app.data.ScanModeOption
 import com.scanrobot.app.data.ScanSettings
-import com.scanrobot.app.data.UserProfile
 import com.scanrobot.app.data.VersionInfo
 import com.scanrobot.app.data.scanModeOptions
 import com.scanrobot.app.network.ApiClient
 import com.scanrobot.app.ui.theme.*
-import coil.compose.AsyncImage
 import com.scanrobot.app.viewmodel.ScanViewModel
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.text.ExperimentalTextApi
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.rememberTextMeasurer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Job
 
 @Composable
 fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
@@ -228,61 +196,26 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
     }
 }
 
-@OptIn(ExperimentalTextApi::class)
 @Composable
 private fun AnnouncementBar(text: String) {
-    // 跑马灯配置
-    val gapPx = with(LocalDensity.current) { 48.dp.toPx() }         // 两份文本之间的间距
-    val speedPxPerSec = with(LocalDensity.current) { 60.dp.toPx() } // 滚动速度：60dp/s ≈ 经典跑马灯
-    val pauseBeforeRestartMs = 500L
+    // 文本实际宽度（px），通过 onTextLayout 获取
+    var textWidthPx by remember { mutableStateOf(0f) }
 
-    val textColor = Color(0xFFE65100)
-    val fontSize = 13.sp
-    val iconSpacingPx = with(LocalDensity.current) { 8.dp.toPx() }
+    val transition = rememberInfiniteTransition(label = "announcement")
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 12000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "scroll"
+    )
 
-    val textMeasurer = rememberTextMeasurer()
-    val textStyle = remember(fontSize, textColor) {
-        TextStyle(fontSize = fontSize, color = textColor)
-    }
-    val layoutResult = remember(text, textStyle) {
-        textMeasurer.measure(text = AnnotatedString(text), style = textStyle)
-    }
-    val textWidth = layoutResult.size.width.toFloat()
-
-    // 滚动偏移
-    var offset by remember { mutableFloatStateOf(0f) }
-    val scope = rememberCoroutineScope()
-    var animJob by remember { mutableStateOf<Job?>(null) }
-
-    // 启动自动滚动循环：0 → textWidth+gapPx，然后跳回0，再开始
-    LaunchedEffect(text, textWidth, gapPx, speedPxPerSec) {
-        animJob?.cancel()
-        animJob = scope.launch {
-            while (true) {
-                if (textWidth <= 0f) { delay(200); continue }
-                val total = textWidth + gapPx
-                val durationMs = (total * 1000f / speedPxPerSec).toLong().coerceAtLeast(300L)
-                val startTimeNanos = System.nanoTime()
-                val startOffset = 0f
-                val endOffset = total
-                // 手动线性动画（避免无限嵌套animate）
-                while (true) {
-                    val elapsed = (System.nanoTime() - startTimeNanos) / 1_000_000L
-                    val t = (elapsed.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-                    offset = startOffset + (endOffset - startOffset) * t
-                    if (t >= 1f) break
-                    delay(16L)
-                }
-                // 到了末尾，跳回起点，实现无缝循环
-                offset = 0f
-                delay(pauseBeforeRestartMs)
-            }
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { animJob?.cancel() }
-    }
+    // 滚动总距离 = 文本宽度 + 间距；进度 0→1 对应偏移 0→-distance
+    val gap = if (textWidthPx > 0f) textWidthPx * 0.3f else 0f
+    val distance = textWidthPx + gap
+    val offsetX = if (distance > 0f) -progress * distance else 0f
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -292,37 +225,45 @@ private fun AnnouncementBar(text: String) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 "\uD83D\uDCE2",
                 fontSize = 14.sp,
-                modifier = Modifier.padding(end = 8.dp)
+                modifier = Modifier.padding(end = 6.dp)
             )
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clipToBounds() // 裁剪超出部分
+                    .height(20.dp)
+                    .clip(RoundedCornerShape(4.dp))
             ) {
-                Canvas(
+                // 第一份文本：从原始位置向左滚到 -distance（完全滚出左边）
+                Text(
+                    text = text,
+                    fontSize = 13.sp,
+                    color = Color(0xFFE65100),
+                    maxLines = 1,
+                    softWrap = false,
+                    onTextLayout = { result ->
+                        textWidthPx = result.size.width.toFloat()
+                    },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(with(LocalDensity.current) { layoutResult.size.height.toDp() })
-                ) {
-                    // 绘制两份文本，间隔 gapPx，实现"绕回来"的无缝循环
-                    val baseX = -offset
-                    drawText(
-                        textMeasurer = textMeasurer,
+                        .offset { IntOffset(x = offsetX.toInt(), y = 0) }
+                        .padding(vertical = 1.dp)
+                )
+                // 第二份文本：从 distance（右边外）同步向左滚到 0，实现无缝衔接
+                if (textWidthPx > 0f) {
+                    Text(
                         text = text,
-                        style = textStyle,
-                        topLeft = Offset(baseX, 0f)
-                    )
-                    drawText(
-                        textMeasurer = textMeasurer,
-                        text = text,
-                        style = textStyle,
-                        topLeft = Offset(baseX + textWidth + gapPx, 0f)
+                        fontSize = 13.sp,
+                        color = Color(0xFFE65100),
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier
+                            .offset { IntOffset(x = (offsetX + distance).toInt(), y = 0) }
+                            .padding(vertical = 1.dp)
                     )
                 }
             }
@@ -346,17 +287,7 @@ private fun AppHeader(appInfo: AppInfo? = null) {
                 .background(BluePrimary),
             contentAlignment = Alignment.Center
         ) {
-            val iconUrl = appInfo?.homeIconUrl
-            if (!iconUrl.isNullOrEmpty()) {
-                AsyncImage(
-                    model = iconUrl,
-                    contentDescription = "应用图标",
-                    modifier = Modifier.fillMaxSize().clip(CircleShape),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Text("SC", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            }
+            Text("SC", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column {
@@ -567,7 +498,7 @@ private fun ManageTab(viewModel: ScanViewModel) {
                     color = DangerRed,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.clickable {
-                        viewModel.clearAllHistory()
+                        viewModel.clearAll()
                         viewModel.showToast("所有数据已清除")
                     }
                 )
@@ -612,49 +543,6 @@ private fun ProfileTab(
     val username = sharedPrefs.getString("auth_username", "扫码机器人") ?: "扫码机器人"
 
     val totalCount = batches.sumOf { it.count }
-
-    var userProfile by remember { mutableStateOf<UserProfile?>(null) }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let {
-            scope.launch {
-                try {
-                    val inputStream = context.contentResolver.openInputStream(uri)
-                    val bytes = inputStream?.readBytes()
-                    inputStream?.close()
-                    if (bytes != null) {
-                        val compressedBytes = compressAvatar(bytes)
-                        val base64 = Base64.encodeToString(compressedBytes, Base64.NO_WRAP)
-                        val success = ApiClient.uploadAvatar(context, "data:image/jpeg;base64,$base64")
-                        if (success) {
-                            val profile = withContext(Dispatchers.IO) { ApiClient.getUserInfo(context) }
-                            if (profile != null) {
-                                userProfile = profile
-                                sharedPrefs.edit().putString("auth_avatar_url", profile.avatarUrl).commit()
-                            }
-                            viewModel.showToast("头像更新成功")
-                        } else {
-                            viewModel.showToast("头像上传失败")
-                        }
-                    }
-                } catch (e: Exception) {
-                    viewModel.showToast("上传失败: ${e.message}")
-                }
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        scope.launch {
-            val profile = withContext(Dispatchers.IO) { ApiClient.getUserInfo(context) }
-            if (profile != null) {
-                userProfile = profile
-                sharedPrefs.edit().putString("auth_avatar_url", profile.avatarUrl).commit()
-            }
-        }
-    }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Box(
@@ -719,30 +607,19 @@ private fun ProfileTab(
                     modifier = Modifier
                         .size(64.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.2f))
-                        .clickable {
-                            launcher.launch("image/*")
-                        },
+                        .background(Color.White.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (!userProfile?.avatarUrl.isNullOrEmpty()) {
-                        AsyncImage(
-                            model = userProfile?.avatarUrl,
-                            contentDescription = "头像",
-                            modifier = Modifier.fillMaxSize().clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Icon(
-                            Icons.Filled.Person,
-                            contentDescription = "头像",
-                            tint = Color.White,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = "头像",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(username, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("v${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
             }
         }
 
@@ -776,7 +653,6 @@ private fun ProfileTab(
                 ProfileRow("提示方式", alertText(settings.alertType))
                 ProfileRow("允许重复录入", if (settings.allowDuplicate) "已开启" else "已关闭")
                 ProfileRow("自动保存照片", if (settings.autoSavePhoto) "已开启" else "已关闭")
-                ProfileRow("关于应用", "v${BuildConfig.VERSION_NAME}")
             }
         }
 
@@ -791,8 +667,10 @@ private fun ProfileTab(
             border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
         ) {
             Column {
+                ProfileRow("关于应用", "v${BuildConfig.VERSION_NAME}")
+                Divider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color(0xFFF0F0F0))
                 ProfileRowClickable("清除所有数据", "点击清除", DangerRed) {
-                    viewModel.clearAllHistory()
+                    viewModel.clearAll()
                     viewModel.showToast("所有数据已清除")
                 }
             }
@@ -1408,25 +1286,5 @@ private fun SimplePickerSheet(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
-    }
-}
-
-private fun compressAvatar(bytes: ByteArray): ByteArray {
-    return try {
-        val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        val maxSize = 256
-        val width = bitmap.width
-        val height = bitmap.height
-        val scale = minOf(maxSize.toFloat() / width, maxSize.toFloat() / height, 1f)
-        val newWidth = (width * scale).toInt()
-        val newHeight = (height * scale).toInt()
-        val scaled = android.graphics.Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
-        val outputStream = java.io.ByteArrayOutputStream()
-        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, outputStream)
-        bitmap.recycle()
-        scaled.recycle()
-        outputStream.toByteArray()
-    } catch (e: Exception) {
-        bytes
     }
 }
