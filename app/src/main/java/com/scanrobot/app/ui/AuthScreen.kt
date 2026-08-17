@@ -75,7 +75,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(BluePrimary)
+                .background(parseHexColor(appInfo?.splashBgColor ?: "#1677ff"))
                 .padding(top = 60.dp, bottom = 32.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -90,8 +90,8 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
                     Text("SC", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(appInfo?.appName ?: "扫码机器人", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Text(appInfo?.appDescription ?: "让手机变成扫码枪", fontSize = 13.sp, color = Color.White.copy(alpha = 0.7f))
+                Text(appInfo?.splashAppName ?: "二维码管理系统", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(appInfo?.splashAppDescription ?: "专业的二维码管理工具", fontSize = 13.sp, color = Color.White.copy(alpha = 0.7f))
             }
         }
 
@@ -657,5 +657,20 @@ private fun AuthTextField(
                 unfocusedContainerColor = BgWhite
             )
         )
+    }
+}
+
+/** hex color string -> Compose Color */
+fun parseHexColor(hex: String): Color {
+    val cleaned = hex.removePrefix("#")
+    return try {
+        Color(
+            red = cleaned.substring(0, 2).toInt(16) / 255f,
+            green = cleaned.substring(2, 4).toInt(16) / 255f,
+            blue = cleaned.substring(4, 6).toInt(16) / 255f,
+            alpha = if (cleaned.length >= 8) cleaned.substring(6, 8).toInt(16) / 255f else 1f
+        )
+    } catch (e: Exception) {
+        Color(0xFF1677FF)
     }
 }
