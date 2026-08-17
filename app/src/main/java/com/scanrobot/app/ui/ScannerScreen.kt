@@ -345,12 +345,9 @@ private fun ResultHeader(viewModel: ScanViewModel) {
                         } else {
                             viewModel.showToast("暂无记录可清空")
                         }
-                    },
-                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                        contentColor = Color(0xFFFF3B30)
-                    )
+                    }
                 ) {
-                    Text("确定清空")
+                    Text("确定清空", color = Color(0xFFFF3B30), fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
