@@ -63,11 +63,19 @@ class MainActivity : ComponentActivity() {
                 var isLoggedIn by remember { mutableStateOf(savedToken != null) }
                 var lastBackPress by remember { mutableLongStateOf(0L) }
                 var showCrashDialog by remember { mutableStateOf(lastCrash != null) }
-                var authAppInfo by remember { mutableStateOf<AppInfo?>(null) }
+                // 启动时先读缓存，避免硬编码默认值一闪
+                var authAppInfo by remember {
+                    val cached = sharedPrefs.getString("cached_app_info", null)
+                    mutableStateOf(cached?.let { AppInfo.fromJsonString(it) })
+                }
 
                 LaunchedEffect(Unit) {
                     val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo() }
-                    authAppInfo = info
+                    if (info != null) {
+                        authAppInfo = info
+                        // 成功获取后写入缓存
+                        sharedPrefs.edit().putString("cached_app_info", info.toJsonString()).apply()
+                    }
                 }
 
                 // Show crash dialog if there was a crash
