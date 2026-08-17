@@ -103,7 +103,7 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
             .fillMaxSize()
             .background(BgLight)
     ) {
-        AppHeader()
+        AppHeader(appInfo)
 
         Box(modifier = Modifier.weight(1f)) {
             when (activeTab) {
@@ -246,7 +246,7 @@ private fun AnnouncementBar(text: String) {
 }
 
 @Composable
-private fun AppHeader() {
+private fun AppHeader(appInfo: AppInfo? = null) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -265,8 +265,8 @@ private fun AppHeader() {
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column {
-            Text("扫码机器人", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Text("让手机变成扫码枪", fontSize = 12.sp, color = TextSecondary)
+            Text(appInfo?.homeAppName ?: "扫码机器人", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(appInfo?.homeAppDescription ?: "让手机变成扫码枪", fontSize = 12.sp, color = TextSecondary)
         }
     }
 }
