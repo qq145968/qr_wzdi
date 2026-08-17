@@ -129,6 +129,11 @@ object ApiClient {
                 splashScreenUrl = data.optString("splash_screen_url", ""),
                 appName = data.optString("app_name", "扫码机器人"),
                 appDescription = data.optString("app_description", "让手机变成扫码枪"),
+                splashAppName = data.optString("splash_app_name", data.optString("app_name", "二维码管理系统")),
+                splashAppDescription = data.optString("splash_app_description", data.optString("app_description", "专业的二维码管理工具")),
+                splashBgColor = data.optString("splash_bg_color", "#1677ff"),
+                homeAppName = data.optString("home_app_name", data.optString("app_name", "扫码机器人")),
+                homeAppDescription = data.optString("home_app_description", data.optString("app_description", "让手机变成扫码枪")),
                 latestVersion = versionInfo,
                 messages = messages,
                 unreadCount = data.optInt("unread_count", 0)
