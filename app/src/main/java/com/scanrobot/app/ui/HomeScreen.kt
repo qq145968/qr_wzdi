@@ -89,13 +89,21 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
     val context = LocalContext.current
     val sharedPrefs = remember { context.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE) }
     var readMessageIds by remember { mutableStateOf<Set<String>>(sharedPrefs.getStringSet("read_message_ids", emptySet()) ?: emptySet()) }
+    // 启动时先读缓存，避免硬编码默认值一闪
+    var appInfo by remember {
+        val cached = sharedPrefs.getString("cached_app_info", null)
+        mutableStateOf(cached?.let { AppInfo.fromJsonString(it) })
+    }
 
     LaunchedEffect(Unit) {
         scope.launch {
             val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo() }
             if (info != null) {
                 val unreadCount = info.messages.count { it.id.toString() !in readMessageIds }
-                appInfo = info.copy(unreadCount = unreadCount)
+                val newInfo = info.copy(unreadCount = unreadCount)
+                appInfo = newInfo
+                // 成功获取后写入缓存，下次启动直接用
+                sharedPrefs.edit().putString("cached_app_info", newInfo.toJsonString()).apply()
                 val currentCode = BuildConfig.VERSION_CODE
                 val latestVersion = info.latestVersion
                 if (latestVersion != null && latestVersion.versionCode > currentCode) {
