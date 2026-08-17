@@ -252,6 +252,7 @@ private fun TopBarButton(onClick: () -> Unit) {
 @Composable
 private fun ResultHeader(viewModel: ScanViewModel) {
     val flashOn by viewModel.flashOn.collectAsState()
+    val scanList by viewModel.scanList.collectAsState()
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     var showClearConfirm by remember { mutableStateOf(false) }
 
@@ -337,10 +338,11 @@ private fun ResultHeader(viewModel: ScanViewModel) {
             title = { Text("清空扫码列表", fontWeight = FontWeight.SemiBold) },
             text = { Text("确定要清空当前扫码列表中的所有记录吗？此操作无法撤销。") },
             confirmButton = {
+                val count = scanList.size
                 TextButton(
                     onClick = {
                         showClearConfirm = false
-                        val count = viewModel.clearAll()
+                        viewModel.clearAll()
                         if (count > 0) {
                             viewModel.showToast("已清空 $count 条记录")
                         } else {
