@@ -11,8 +11,8 @@ android {
         applicationId = "com.scanrobot.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.6.0"
+        versionCode = 2
+        versionName = "1.0.0"
     }
 
     signingConfigs {
@@ -93,6 +93,8 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    implementation("io.coil-kt:coil-compose:2.5.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
