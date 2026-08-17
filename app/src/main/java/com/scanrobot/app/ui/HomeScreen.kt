@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.database.Cursor
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Environment
 import java.io.File
@@ -49,7 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -58,7 +59,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.scanrobot.app.BuildConfig
 import com.scanrobot.app.data.AppInfo
 import com.scanrobot.app.data.AppMessage
@@ -638,6 +638,15 @@ private fun ProfileTab(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 val avPath = avatarPath
+                // 加载头像 bitmap（每次切换 path 或首次进入时解析）
+                val avatarBitmap = remember(avPath) {
+                    if (avPath != null && File(avPath).exists()) {
+                        runCatching {
+                            BitmapFactory.Options().apply { inJustDecodeBounds = false }
+                            BitmapFactory.decodeFile(avPath)
+                        }.getOrNull()
+                    } else null
+                }
                 Box(
                     modifier = Modifier
                         .size(72.dp)
@@ -650,12 +659,10 @@ private fun ProfileTab(
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (avPath != null && File(avPath).exists()) {
-                        AsyncImage(
-                            model = avPath,
+                    if (avatarBitmap != null) {
+                        androidx.compose.foundation.Image(
+                            bitmap = avatarBitmap.asImageBitmap(),
                             contentDescription = "头像",
-                            placeholder = ColorPainter(Color.White.copy(alpha = 0.1f)),
-                            error = ColorPainter(Color.White.copy(alpha = 0.1f)),
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize().clip(CircleShape)
                         )
