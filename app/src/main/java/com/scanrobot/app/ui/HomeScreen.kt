@@ -82,7 +82,6 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
     var showTypePicker by remember { mutableStateOf(false) }
     var showAlertPicker by remember { mutableStateOf(false) }
 
-    var appInfo by remember { mutableStateOf<AppInfo?>(null) }
     var showMessageDialog by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
