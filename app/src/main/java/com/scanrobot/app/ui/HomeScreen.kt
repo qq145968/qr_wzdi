@@ -893,7 +893,7 @@ private fun VersionUpdateDialog(version: VersionInfo, onDismiss: () -> Unit) {
                                     setDataAndType(Uri.parse(uri), "application/vnd.android.package-archive")
                                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                                 }
-                                context.startActivity(installIntent)
+                                try { context.startActivity(installIntent) } catch (_: Throwable) {}
                             } else if (status == DownloadManager.STATUS_FAILED) {
                                 downloadState = "failed"
                                 statusMessage = "下载失败，请重试"
@@ -903,7 +903,11 @@ private fun VersionUpdateDialog(version: VersionInfo, onDismiss: () -> Unit) {
                 }
             }
         }
-        context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+        }
         onDispose {
             try { context.unregisterReceiver(receiver) } catch (_: Throwable) {}
         }
@@ -918,10 +922,24 @@ private fun VersionUpdateDialog(version: VersionInfo, onDismiss: () -> Unit) {
                 val cursor = dm?.query(query)
                 cursor?.use {
                     if (it.moveToFirst()) {
+                        val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
                         val downloaded = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
                         val total = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
                         if (total > 0) {
                             downloadProgress = ((downloaded * 100) / total).toInt()
+                        }
+                        if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                            downloadState = "complete"
+                            val uri = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+                            statusMessage = "下载完成，正在安装..."
+                            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(Uri.parse(uri), "application/vnd.android.package-archive")
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            try { context.startActivity(installIntent) } catch (_: Throwable) {}
+                        } else if (status == DownloadManager.STATUS_FAILED) {
+                            downloadState = "failed"
+                            statusMessage = "下载失败，请重试"
                         }
                     }
                 }
@@ -1015,20 +1033,24 @@ private fun VersionUpdateDialog(version: VersionInfo, onDismiss: () -> Unit) {
                 }
                 "complete" -> {
                     TextButton(onClick = {
-                        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
-                        val query = DownloadManager.Query().setFilterById(downloadId)
-                        val cursor = dm?.query(query)
-                        cursor?.use {
-                            if (it.moveToFirst()) {
-                                val uri = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
-                                val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                                    setDataAndType(Uri.parse(uri), "application/vnd.android.package-archive")
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        try {
+                            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+                            val query = DownloadManager.Query().setFilterById(downloadId)
+                            val cursor = dm?.query(query)
+                            cursor?.use {
+                                if (it.moveToFirst()) {
+                                    val uri = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+                                    val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                                        setDataAndType(Uri.parse(uri), "application/vnd.android.package-archive")
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(installIntent)
                                 }
-                                context.startActivity(installIntent)
                             }
-                        }
-                    }) { Text("安装") }
+                        } catch (_: Throwable) {}
+                    }) {
+                        Text("安装", fontWeight = FontWeight.SemiBold)
+                    }
                 }
                 "failed" -> {
                     TextButton(onClick = { startDownload() }) { Text("重试") }
