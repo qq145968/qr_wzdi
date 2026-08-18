@@ -9,6 +9,7 @@ import android.database.Cursor
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Environment
+import androidx.core.content.FileProvider
 import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -105,8 +106,10 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
                 // 成功获取后写入缓存，下次启动直接用
                 sharedPrefs.edit().putString("cached_app_info", newInfo.toJsonString()).apply()
                 val currentCode = BuildConfig.VERSION_CODE
+                val currentName = BuildConfig.VERSION_NAME
                 val latestVersion = info.latestVersion
-                if (latestVersion != null && latestVersion.versionCode > currentCode) {
+                if (latestVersion != null && latestVersion.versionCode > currentCode
+                    && latestVersion.versionName != currentName) {
                     showUpdateDialog = true
                 }
             }
@@ -873,6 +876,46 @@ private fun VersionUpdateDialog(version: VersionInfo, onDismiss: () -> Unit) {
     var downloadId by remember { mutableStateOf(-1L) }
     var statusMessage by remember { mutableStateOf("") }
 
+    fun installApk() {
+        try {
+            val fileName = "scan-robot-v${version.versionName}.apk"
+            val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            val file = File(dir, fileName)
+            if (!file.exists()) {
+                val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+                val query = DownloadManager.Query().setFilterById(downloadId)
+                val cursor = dm?.query(query)
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        val localUri = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+                        if (localUri != null) {
+                            val uri = Uri.parse(localUri)
+                            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, "application/vnd.android.package-archive")
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            }
+                            context.startActivity(installIntent)
+                            return
+                        }
+                    }
+                }
+                statusMessage = "文件未找到，请重新下载"
+                downloadState = "failed"
+                return
+            }
+            val authority = "${context.packageName}.fileprovider"
+            val uri = FileProvider.getUriForFile(context, authority, file)
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+            context.startActivity(installIntent)
+        } catch (e: Throwable) {
+            statusMessage = "安装失败: ${e.message}"
+            downloadState = "failed"
+        }
+    }
+
     DisposableEffect(downloadState) {
         if (downloadState != "downloading") return@DisposableEffect onDispose {}
         val receiver = object : BroadcastReceiver() {
@@ -887,13 +930,8 @@ private fun VersionUpdateDialog(version: VersionInfo, onDismiss: () -> Unit) {
                             val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
                             if (status == DownloadManager.STATUS_SUCCESSFUL) {
                                 downloadState = "complete"
-                                val uri = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
-                                statusMessage = "下载完成，正在安装..."
-                                val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                                    setDataAndType(Uri.parse(uri), "application/vnd.android.package-archive")
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                }
-                                try { context.startActivity(installIntent) } catch (_: Throwable) {}
+                                statusMessage = "下载完成，请点击安装"
+                                installApk()
                             } else if (status == DownloadManager.STATUS_FAILED) {
                                 downloadState = "failed"
                                 statusMessage = "下载失败，请重试"
@@ -930,13 +968,8 @@ private fun VersionUpdateDialog(version: VersionInfo, onDismiss: () -> Unit) {
                         }
                         if (status == DownloadManager.STATUS_SUCCESSFUL) {
                             downloadState = "complete"
-                            val uri = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
-                            statusMessage = "下载完成，正在安装..."
-                            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(Uri.parse(uri), "application/vnd.android.package-archive")
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                            }
-                            try { context.startActivity(installIntent) } catch (_: Throwable) {}
+                            statusMessage = "下载完成，请点击安装"
+                            installApk()
                         } else if (status == DownloadManager.STATUS_FAILED) {
                             downloadState = "failed"
                             statusMessage = "下载失败，请重试"
@@ -1032,23 +1065,7 @@ private fun VersionUpdateDialog(version: VersionInfo, onDismiss: () -> Unit) {
                     }
                 }
                 "complete" -> {
-                    TextButton(onClick = {
-                        try {
-                            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
-                            val query = DownloadManager.Query().setFilterById(downloadId)
-                            val cursor = dm?.query(query)
-                            cursor?.use {
-                                if (it.moveToFirst()) {
-                                    val uri = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
-                                    val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                                        setDataAndType(Uri.parse(uri), "application/vnd.android.package-archive")
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                    }
-                                    context.startActivity(installIntent)
-                                }
-                            }
-                        } catch (_: Throwable) {}
-                    }) {
+                    TextButton(onClick = { installApk() }) {
                         Text("安装", fontWeight = FontWeight.SemiBold)
                     }
                 }
