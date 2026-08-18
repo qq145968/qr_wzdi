@@ -86,10 +86,24 @@ object ApiClient {
         return postRequest("/reset_password.php", json)
     }
 
-    fun getAppInfo(): AppInfo? {
+    fun getAppInfo(context: Context? = null): AppInfo? {
         return try {
+            val urlBuilder = okhttp3.HttpUrl.Builder()
+                .scheme("https")
+                .host("qr.wzdi.cn")
+                .addPathSegment("api")
+                .addPathSegment("app_info.php")
+            // 如已登录，附带 user_id / token 便于后端精准下发 single 类消息（仅发给指定用户的私信/通知）
+            if (context != null) {
+                val sp = context.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE)
+                val uid = sp.getInt("auth_user_id", 0)
+                val token = sp.getString("auth_token", null)
+                if (uid > 0) urlBuilder.addQueryParameter("user_id", uid.toString())
+                if (!token.isNullOrEmpty()) urlBuilder.addQueryParameter("token", token)
+            }
+            val url = urlBuilder.build().toString()
             val request = Request.Builder()
-                .url("$BASE_URL/app_info.php")
+                .url(url)
                 .get()
                 .build()
             val response = client.newCall(request).execute()
@@ -123,11 +137,21 @@ object ApiClient {
                 ))
             }
 
+            val legacyCaptcha = data.optBoolean("captcha_enabled", false)
+            val captchaLoginEnabled = if (data.has("captcha_login_enabled")) data.optBoolean("captcha_login_enabled", false) else legacyCaptcha
+            val captchaRegisterEnabled = if (data.has("captcha_register_enabled")) data.optBoolean("captcha_register_enabled", false) else legacyCaptcha
+            val slidingLoginEnabled = data.optBoolean("sliding_login_enabled", false)
+            val slidingRegisterEnabled = data.optBoolean("sliding_register_enabled", false)
+
             AppInfo(
                 announcement = data.optString("announcement", "欢迎使用扫码机器人"),
                 maintenanceMode = data.optBoolean("maintenance_mode", false),
                 registrationRequired = data.optBoolean("registration_required", true),
-                captchaEnabled = data.optBoolean("captcha_enabled", false),
+                captchaEnabled = legacyCaptcha || captchaLoginEnabled || captchaRegisterEnabled,
+                captchaLoginEnabled = captchaLoginEnabled,
+                captchaRegisterEnabled = captchaRegisterEnabled,
+                slidingLoginEnabled = slidingLoginEnabled,
+                slidingRegisterEnabled = slidingRegisterEnabled,
                 splashScreenUrl = data.optString("splash_screen_url", ""),
                 appName = data.optString("app_name", "扫码机器人"),
                 appDescription = data.optString("app_description", "让手机变成扫码枪"),
@@ -203,12 +227,40 @@ object ApiClient {
             val response = client.newCall(request).execute()
             val responseBody = response.body?.string() ?: ""
             val resultJson = JSONObject(responseBody)
+            val success = resultJson.optBoolean("success", false)
+            val message = resultJson.optString("message", "")
+            val dataObj = resultJson.optJSONObject("data")
+            val userObj = resultJson.optJSONObject("user")
+            // token / user_id / username 的读取：优先 data.*，兜底 user.*
+            fun pickString(key: String): String? {
+                val v1 = dataObj?.optString(key, null)?.takeIf { it.isNotEmpty() }
+                if (v1 != null) return v1
+                val v2 = userObj?.optString(key, null)?.takeIf { it.isNotEmpty() }
+                if (v2 != null) return v2
+                // 登录接口 user.id / user_id 双兼容
+                if (key == "user_id") {
+                    val alt = userObj?.optString("id", null)?.takeIf { it.isNotEmpty() }
+                    if (alt != null) return alt
+                }
+                return null
+            }
+            fun pickInt(key: String): Int {
+                val v1 = dataObj?.optInt(key, 0) ?: 0
+                if (v1 > 0) return v1
+                val v2 = userObj?.optInt(key, 0) ?: 0
+                if (v2 > 0) return v2
+                if (key == "user_id") {
+                    val v3 = userObj?.optInt("id", 0) ?: 0
+                    if (v3 > 0) return v3
+                }
+                return 0
+            }
             ApiResult(
-                success = resultJson.optBoolean("success", false),
-                message = resultJson.optString("message", ""),
-                token = resultJson.optJSONObject("data")?.optString("token", ""),
-                userId = resultJson.optJSONObject("data")?.optInt("user_id", 0) ?: 0,
-                username = resultJson.optJSONObject("data")?.optString("username", "")
+                success = success,
+                message = message,
+                token = pickString("token"),
+                userId = pickInt("user_id"),
+                username = pickString("username")
             )
         } catch (e: Throwable) {
             ApiResult(success = false, message = "网络错误: ${e.message ?: "未知错误"}")

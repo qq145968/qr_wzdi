@@ -1,4 +1,4 @@
-﻿package com.scanrobot.app.ui
+package com.scanrobot.app.ui
 
 import android.content.Context
 import android.graphics.BitmapFactory
@@ -8,11 +8,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import androidx.compose.foundation.verticalScroll
@@ -57,14 +59,33 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
 
     var captchaResult by remember { mutableStateOf<CaptchaResult?>(null) }
     var captchaCode by remember { mutableStateOf("") }
-    val captchaEnabled = appInfo?.captchaEnabled ?: false
+    var slidingVerified by remember { mutableStateOf(false) }
+    // 登录/注册独立的验证码开关（新版），兜底使用老的 captchaEnabled
+    val loginCaptchaEnabled = appInfo?.captchaLoginEnabled ?: appInfo?.captchaEnabled ?: false
+    val registerCaptchaEnabled = appInfo?.captchaRegisterEnabled ?: appInfo?.captchaEnabled ?: false
+    val captchaEnabled = if (screenMode == "login") loginCaptchaEnabled else registerCaptchaEnabled
+    val slidingLoginEnabled = appInfo?.slidingLoginEnabled ?: false
+    val slidingRegisterEnabled = appInfo?.slidingRegisterEnabled ?: false
+    val slidingEnabled = if (screenMode == "login") slidingLoginEnabled else (screenMode == "register" && slidingRegisterEnabled)
     val registrationRequired = appInfo?.registrationRequired ?: true
 
-    LaunchedEffect(screenMode, captchaEnabled) {
-        if (captchaEnabled && (screenMode == "login" || screenMode == "register")) {
+    LaunchedEffect(screenMode) {
+        slidingVerified = false
+    }
+
+    LaunchedEffect(screenMode, loginCaptchaEnabled, registerCaptchaEnabled) {
+        val enabledForScreen = when (screenMode) {
+            "login" -> loginCaptchaEnabled
+            "register" -> registerCaptchaEnabled
+            else -> false
+        }
+        if (enabledForScreen) {
             scope.launch {
                 captchaResult = withContext(Dispatchers.IO) { ApiClient.fetchCaptcha() }
             }
+        } else {
+            captchaResult = null
+            captchaCode = ""
         }
     }
 
@@ -123,9 +144,14 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
                             captchaResult = withContext(Dispatchers.IO) { ApiClient.fetchCaptcha() }
                         }
                     },
+                    slidingEnabled = slidingLoginEnabled,
+                    slidingVerified = slidingVerified,
+                    onSlidingVerify = { slidingVerified = true },
                     onLogin = {
                         if (username.isBlank() || password.isBlank()) {
                             message = "请输入用户名和密码"; messageIsError = true
+                        } else if (slidingLoginEnabled && !slidingVerified) {
+                            message = "请先完成滑动验证"; messageIsError = true
                         } else if (captchaEnabled && captchaCode.isBlank()) {
                             message = "请输入验证码"; messageIsError = true
                         } else {
@@ -144,10 +170,13 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
                                     Log.d("AuthScreen", "Login result: success=${result.success}, msg=${result.message}")
                                     if (result.success && !result.token.isNullOrEmpty()) {
                                         val sharedPrefs = context.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE)
-                                        sharedPrefs.edit()
-                                            .putString("auth_token", result.token)
-                                            .putString("auth_username", result.username ?: username)
-                                            .commit()
+                                        val editor = sharedPrefs.edit()
+                                        editor.putString("auth_token", result.token)
+                                        editor.putString("auth_username", result.username ?: username)
+                                        if (result.userId > 0) {
+                                            editor.putInt("auth_user_id", result.userId)
+                                        }
+                                        editor.commit()
                                         message = "登录成功"; messageIsError = false
                                         onLoginSuccess()
                                     } else {
@@ -192,12 +221,16 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
                             captchaResult = withContext(Dispatchers.IO) { ApiClient.fetchCaptcha() }
                         }
                     },
+                    slidingEnabled = slidingRegisterEnabled,
+                    slidingVerified = slidingVerified,
+                    onSlidingVerify = { slidingVerified = true },
                     onRegister = {
                         when {
                             username.length < 3 -> { message = "用户名至少3个字符"; messageIsError = true }
                             password.length < 6 -> { message = "密码至少6位"; messageIsError = true }
                             password != confirmPassword -> { message = "两次密码不一致"; messageIsError = true }
                             email.isBlank() || !email.contains("@") -> { message = "请输入有效邮箱"; messageIsError = true }
+                            slidingRegisterEnabled && !slidingVerified -> { message = "请先完成滑动验证"; messageIsError = true }
                             captchaEnabled && captchaCode.isBlank() -> { message = "请输入验证码"; messageIsError = true }
                             else -> {
                                 scope.launch {
@@ -385,6 +418,59 @@ private fun CaptchaSection(
 }
 
 @Composable
+private fun SlidingCaptcha(verified: Boolean, onVerify: () -> Unit) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val trackWidthPx = with(density) { 280.dp.toPx() }
+    val thumbSizePx = with(density) { 44.dp.toPx() }
+    val maxOffsetPx = trackWidthPx - thumbSizePx
+    var offsetX by remember { mutableStateOf(0f) }
+
+    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+        Text("滑动验证", fontSize = 13.sp, color = TextSecondary, modifier = Modifier.padding(bottom = 6.dp))
+        Box(
+            modifier = Modifier
+                .width(280.dp)
+                .height(44.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (verified) Color(0xFFE8F5E9) else Color(0xFFF5F5F5))
+                .border(0.5.dp, if (verified) Color(0xFF4CAF50) else BorderLight, RoundedCornerShape(8.dp))
+        ) {
+            Text(
+                if (verified) "验证成功" else "请按住滑块，拖动到最右边",
+                fontSize = 13.sp,
+                color = if (verified) Color(0xFF4CAF50) else TextSecondary,
+                modifier = Modifier.align(Alignment.Center)
+            )
+            Box(
+                modifier = Modifier
+                    .offset { IntOffset(if (verified) maxOffsetPx.toInt() else offsetX.toInt(), 0) }
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (verified) Color(0xFF4CAF50) else BluePrimary)
+                    .pointerInput(verified) {
+                        if (verified) return@pointerInput
+                        detectDragGestures(
+                            onDragEnd = {
+                                if (offsetX >= maxOffsetPx - 10f) {
+                                    onVerify()
+                                } else {
+                                    offsetX = 0f
+                                }
+                            }
+                        ) { change, dragAmount ->
+                            change.consume()
+                            offsetX = (offsetX + dragAmount.x).coerceIn(0f, maxOffsetPx)
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("→", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
 private fun LoginContent(
     username: String, onUsernameChange: (String) -> Unit,
     password: String, onPasswordChange: (String) -> Unit,
@@ -395,6 +481,9 @@ private fun LoginContent(
     captchaCode: String,
     onCaptchaCodeChange: (String) -> Unit,
     onRefreshCaptcha: () -> Unit,
+    slidingEnabled: Boolean,
+    slidingVerified: Boolean,
+    onSlidingVerify: () -> Unit,
     onLogin: () -> Unit,
     onForgotPassword: () -> Unit,
     onSwitchToRegister: () -> Unit,
@@ -415,7 +504,10 @@ private fun LoginContent(
         isPassword = !showPassword, onTogglePassword = onTogglePassword
     )
 
-    if (captchaEnabled) {
+    if (slidingEnabled) {
+        Spacer(modifier = Modifier.height(16.dp))
+        SlidingCaptcha(verified = slidingVerified, onVerify = onSlidingVerify)
+    } else if (captchaEnabled) {
         Spacer(modifier = Modifier.height(16.dp))
         CaptchaSection(captchaResult, captchaCode, onCaptchaCodeChange, onRefreshCaptcha)
     }
@@ -488,6 +580,9 @@ private fun RegisterContent(
     captchaCode: String,
     onCaptchaCodeChange: (String) -> Unit,
     onRefreshCaptcha: () -> Unit,
+    slidingEnabled: Boolean,
+    slidingVerified: Boolean,
+    onSlidingVerify: () -> Unit,
     onRegister: () -> Unit,
     onSwitchToLogin: () -> Unit
 ) {
@@ -519,7 +614,10 @@ private fun RegisterContent(
         isPassword = !showPassword
     )
 
-    if (captchaEnabled) {
+    if (slidingEnabled) {
+        Spacer(modifier = Modifier.height(16.dp))
+        SlidingCaptcha(verified = slidingVerified, onVerify = onSlidingVerify)
+    } else if (captchaEnabled) {
         Spacer(modifier = Modifier.height(16.dp))
         CaptchaSection(captchaResult, captchaCode, onCaptchaCodeChange, onRefreshCaptcha)
     }

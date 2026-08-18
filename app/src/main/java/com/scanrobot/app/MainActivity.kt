@@ -69,8 +69,8 @@ class MainActivity : ComponentActivity() {
                     mutableStateOf(cached?.let { AppInfo.fromJsonString(it) })
                 }
 
-                LaunchedEffect(Unit) {
-                    val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo() }
+                LaunchedEffect(Unit, isLoggedIn) {
+                    val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo(this@MainActivity) }
                     if (info != null) {
                         authAppInfo = info
                         // 成功获取后写入缓存
@@ -153,6 +153,8 @@ class MainActivity : ComponentActivity() {
                                     sharedPrefs.edit()
                                         .remove("auth_token")
                                         .remove("auth_username")
+                                        .remove("auth_user_id")
+                                        .remove("cached_app_info")
                                         .commit()
                                     isLoggedIn = false
                                 }

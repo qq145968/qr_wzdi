@@ -39,7 +39,16 @@ data class AppInfo(
     val announcement: String = "",
     val maintenanceMode: Boolean = false,
     val registrationRequired: Boolean = true,
+    /** 兼容旧版：任一验证码开启就为 true */
     val captchaEnabled: Boolean = false,
+    /** 登录页是否开启图形验证码（新版拆分键）*/
+    val captchaLoginEnabled: Boolean = false,
+    /** 注册页是否开启图形验证码（新版拆分键）*/
+    val captchaRegisterEnabled: Boolean = false,
+    /** 登录页是否开启滑动验证码 */
+    val slidingLoginEnabled: Boolean = false,
+    /** 注册页是否开启滑动验证码 */
+    val slidingRegisterEnabled: Boolean = false,
     val splashScreenUrl: String = "",
     val appName: String = "扫码机器人",
     val appDescription: String = "让手机变成扫码枪",
@@ -60,6 +69,10 @@ data class AppInfo(
         json.put("maintenance_mode", maintenanceMode)
         json.put("registration_required", registrationRequired)
         json.put("captcha_enabled", captchaEnabled)
+        json.put("captcha_login_enabled", captchaLoginEnabled)
+        json.put("captcha_register_enabled", captchaRegisterEnabled)
+        json.put("sliding_login_enabled", slidingLoginEnabled)
+        json.put("sliding_register_enabled", slidingRegisterEnabled)
         json.put("splash_screen_url", splashScreenUrl)
         json.put("app_name", appName)
         json.put("app_description", appDescription)
@@ -82,11 +95,20 @@ data class AppInfo(
         fun fromJsonString(str: String): AppInfo? {
             return try {
                 val json = JSONObject(str)
+                val legacyCaptcha = json.optBoolean("captcha_enabled", false)
+                val loginCap = if (json.has("captcha_login_enabled")) json.optBoolean("captcha_login_enabled", false) else legacyCaptcha
+                val regCap = if (json.has("captcha_register_enabled")) json.optBoolean("captcha_register_enabled", false) else legacyCaptcha
+                val slidingLogin = json.optBoolean("sliding_login_enabled", false)
+                val slidingReg = json.optBoolean("sliding_register_enabled", false)
                 AppInfo(
                     announcement = json.optString("announcement", ""),
                     maintenanceMode = json.optBoolean("maintenance_mode", false),
                     registrationRequired = json.optBoolean("registration_required", true),
-                    captchaEnabled = json.optBoolean("captcha_enabled", false),
+                    captchaEnabled = legacyCaptcha || loginCap || regCap,
+                    captchaLoginEnabled = loginCap,
+                    captchaRegisterEnabled = regCap,
+                    slidingLoginEnabled = slidingLogin,
+                    slidingRegisterEnabled = slidingReg,
                     splashScreenUrl = json.optString("splash_screen_url", ""),
                     appName = json.optString("app_name", "扫码机器人"),
                     appDescription = json.optString("app_description", "让手机变成扫码枪"),

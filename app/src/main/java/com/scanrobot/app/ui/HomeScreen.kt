@@ -96,7 +96,7 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
 
     LaunchedEffect(Unit) {
         scope.launch {
-            val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo() }
+            val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo(context) }
             if (info != null) {
                 val unreadCount = info.messages.count { it.id.toString() !in readMessageIds }
                 val newInfo = info.copy(unreadCount = unreadCount)
@@ -371,6 +371,31 @@ private fun ScanTab(
     onAlertPickerOpen: () -> Unit
 ) {
     val settings by viewModel.settings.collectAsState()
+    var showDuplicateHelp by remember { mutableStateOf(false) }
+    var showPhotoHelp by remember { mutableStateOf(false) }
+
+    if (showDuplicateHelp) {
+        HelpDialog(
+            title = "允许二维码重复录入",
+            bullets = listOf(
+                "开启时，扫描已在扫描列表中的二维码不会提示重复，可再次录入；",
+                "关闭时，则会对列表中已存在的二维码进行提示重复，不允许录入。"
+            ),
+            onDismiss = { showDuplicateHelp = false }
+        )
+    }
+
+    if (showPhotoHelp) {
+        HelpDialog(
+            title = "自动保存扫码照片",
+            paragraphs = listOf(
+                Pair("开启后，扫码后将自动拍照。为保证照片清晰，", false),
+                Pair("建议使用半屏连扫或全屏连扫，微信原生扫码无法确保照片的清晰度。", true),
+                Pair("所有保存的扫码照片均支持批量导出。", false)
+            ),
+            onDismiss = { showPhotoHelp = false }
+        )
+    }
 
     Column(modifier = Modifier.padding(16.dp)) {
         Card(
@@ -381,10 +406,10 @@ private fun ScanTab(
         ) {
             Column {
                 SettingRowClick("扫码模式", modeText(settings.scanMode)) { onModePickerOpen() }
-                SettingRowToggle("允许二维码重复录入", settings.allowDuplicate) {
+                SettingRowToggle("允许二维码重复录入", settings.allowDuplicate, { showDuplicateHelp = true }) {
                     viewModel.toggleDuplicate()
                 }
-                SettingRowToggle("自动保存扫码照片", settings.autoSavePhoto) {
+                SettingRowToggle("自动保存扫码照片", settings.autoSavePhoto, { showPhotoHelp = true }) {
                     viewModel.togglePhoto()
                 }
                 SettingRowClick("扫码类型", typeText(settings.scanType)) { onTypePickerOpen() }
@@ -419,8 +444,6 @@ private fun SettingRowClick(label: String, value: String, onClick: () -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label, fontSize = 15.sp, color = TextPrimary)
-            Spacer(modifier = Modifier.width(4.dp))
-            InfoIcon()
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(value, fontSize = 14.sp, color = TextSecondary)
@@ -438,7 +461,7 @@ private fun SettingRowClick(label: String, value: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SettingRowToggle(label: String, isOn: Boolean, onToggle: () -> Unit) {
+private fun SettingRowToggle(label: String, isOn: Boolean, onHelpClick: () -> Unit, onToggle: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -450,7 +473,7 @@ private fun SettingRowToggle(label: String, isOn: Boolean, onToggle: () -> Unit)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label, fontSize = 15.sp, color = TextPrimary)
             Spacer(modifier = Modifier.width(4.dp))
-            InfoIcon()
+            HelpIcon(onClick = onHelpClick)
         }
         ToggleSwitch(isOn, onToggle)
     }
@@ -1136,6 +1159,78 @@ private fun InfoIcon() {
         contentAlignment = Alignment.Center
     ) {
         Text("i", fontSize = 9.sp, color = Color(0xFFCCCCCC), fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+    }
+}
+
+@Composable
+private fun HelpIcon(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(16.dp)
+            .clip(CircleShape)
+            .border(1.dp, Color(0xFFBBBBBB), CircleShape)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text("?", fontSize = 10.sp, color = Color(0xFF888888), fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun HelpDialog(
+    title: String,
+    bullets: List<String> = emptyList(),
+    paragraphs: List<Pair<String, Boolean>> = emptyList(),
+    onDismiss: () -> Unit
+) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text("×", fontSize = 20.sp, color = Color(0xFF999999), modifier = Modifier.clickable { onDismiss() })
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                bullets.forEach { text ->
+                    Row(modifier = Modifier.padding(vertical = 4.dp)) {
+                        Text("•", fontSize = 14.sp, color = TextSecondary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text, fontSize = 14.sp, color = TextSecondary, lineHeight = 22.sp)
+                    }
+                }
+                paragraphs.forEach { (text, isBold) ->
+                    Text(
+                        text,
+                        fontSize = 14.sp,
+                        color = TextSecondary,
+                        lineHeight = 22.sp,
+                        fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFF5F5F5),
+                        contentColor = TextSecondary
+                    )
+                ) {
+                    Text("我知道了", fontSize = 14.sp)
+                }
+            }
+        }
     }
 }
 
