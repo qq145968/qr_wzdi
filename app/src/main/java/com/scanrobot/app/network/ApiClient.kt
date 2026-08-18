@@ -142,6 +142,7 @@ object ApiClient {
             val captchaRegisterEnabled = if (data.has("captcha_register_enabled")) data.optBoolean("captcha_register_enabled", false) else legacyCaptcha
             val slidingLoginEnabled = data.optBoolean("sliding_login_enabled", false)
             val slidingRegisterEnabled = data.optBoolean("sliding_register_enabled", false)
+            val slidingForgotEnabled = data.optBoolean("sliding_forgot_enabled", false)
 
             AppInfo(
                 announcement = data.optString("announcement", "欢迎使用扫码机器人"),
@@ -152,6 +153,7 @@ object ApiClient {
                 captchaRegisterEnabled = captchaRegisterEnabled,
                 slidingLoginEnabled = slidingLoginEnabled,
                 slidingRegisterEnabled = slidingRegisterEnabled,
+                slidingForgotEnabled = slidingForgotEnabled,
                 splashScreenUrl = data.optString("splash_screen_url", ""),
                 appName = data.optString("app_name", "扫码机器人"),
                 appDescription = data.optString("app_description", "让手机变成扫码枪"),

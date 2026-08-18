@@ -49,6 +49,8 @@ data class AppInfo(
     val slidingLoginEnabled: Boolean = false,
     /** 注册页是否开启滑动验证码 */
     val slidingRegisterEnabled: Boolean = false,
+    /** 找回密码页是否开启滑动验证码 */
+    val slidingForgotEnabled: Boolean = false,
     val splashScreenUrl: String = "",
     val appName: String = "扫码机器人",
     val appDescription: String = "让手机变成扫码枪",
@@ -73,6 +75,7 @@ data class AppInfo(
         json.put("captcha_register_enabled", captchaRegisterEnabled)
         json.put("sliding_login_enabled", slidingLoginEnabled)
         json.put("sliding_register_enabled", slidingRegisterEnabled)
+        json.put("sliding_forgot_enabled", slidingForgotEnabled)
         json.put("splash_screen_url", splashScreenUrl)
         json.put("app_name", appName)
         json.put("app_description", appDescription)
@@ -100,6 +103,7 @@ data class AppInfo(
                 val regCap = if (json.has("captcha_register_enabled")) json.optBoolean("captcha_register_enabled", false) else legacyCaptcha
                 val slidingLogin = json.optBoolean("sliding_login_enabled", false)
                 val slidingReg = json.optBoolean("sliding_register_enabled", false)
+                val slidingForgot = json.optBoolean("sliding_forgot_enabled", false)
                 AppInfo(
                     announcement = json.optString("announcement", ""),
                     maintenanceMode = json.optBoolean("maintenance_mode", false),
@@ -109,6 +113,7 @@ data class AppInfo(
                     captchaRegisterEnabled = regCap,
                     slidingLoginEnabled = slidingLogin,
                     slidingRegisterEnabled = slidingReg,
+                    slidingForgotEnabled = slidingForgot,
                     splashScreenUrl = json.optString("splash_screen_url", ""),
                     appName = json.optString("app_name", "扫码机器人"),
                     appDescription = json.optString("app_description", "让手机变成扫码枪"),

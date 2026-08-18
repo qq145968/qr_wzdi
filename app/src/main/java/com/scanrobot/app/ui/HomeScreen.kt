@@ -49,6 +49,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -1166,13 +1167,14 @@ private fun InfoIcon() {
 private fun HelpIcon(onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(16.dp)
+            .size(20.dp)
             .clip(CircleShape)
-            .border(1.dp, Color(0xFFBBBBBB), CircleShape)
+            .background(Color(0xFFF0F0F5))
+            .border(1.dp, Color(0xFFD0D0D8), CircleShape)
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Text("?", fontSize = 10.sp, color = Color(0xFF888888), fontWeight = FontWeight.Bold)
+        Text("?", fontSize = 11.sp, color = Color(0xFF8A8A9A), fontWeight = FontWeight.Bold)
     }
 }
 
@@ -1186,48 +1188,91 @@ private fun HelpDialog(
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xFF4A90D9), Color(0xFF357ABD))
+                            )
+                        )
+                        .padding(horizontal = 20.dp, vertical = 18.dp)
                 ) {
-                    Text(title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    Text("×", fontSize = 20.sp, color = Color(0xFF999999), modifier = Modifier.clickable { onDismiss() })
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                bullets.forEach { text ->
-                    Row(modifier = Modifier.padding(vertical = 4.dp)) {
-                        Text("•", fontSize = 14.sp, color = TextSecondary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text, fontSize = 14.sp, color = TextSecondary, lineHeight = 22.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.25f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("?", fontSize = 15.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.2f))
+                                .clickable { onDismiss() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("×", fontSize = 16.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
-                paragraphs.forEach { (text, isBold) ->
-                    Text(
-                        text,
-                        fontSize = 14.sp,
-                        color = TextSecondary,
-                        lineHeight = 22.sp,
-                        fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.height(20.dp))
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFF5F5F5),
-                        contentColor = TextSecondary
-                    )
-                ) {
-                    Text("我知道了", fontSize = 14.sp)
+
+                Column(modifier = Modifier.padding(20.dp)) {
+                    if (bullets.isNotEmpty()) {
+                        bullets.forEach { text ->
+                            Row(modifier = Modifier.padding(vertical = 5.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(BluePrimary)
+                                        .align(Alignment.Top)
+                                        .padding(top = 8.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(text, fontSize = 14.sp, color = Color(0xFF555560), lineHeight = 22.sp)
+                            }
+                        }
+                    }
+                    paragraphs.forEach { (text, isBold) ->
+                        Text(
+                            text,
+                            fontSize = 14.sp,
+                            color = if (isBold) Color(0xFF333340) else Color(0xFF666670),
+                            lineHeight = 22.sp,
+                            fontWeight = if (isBold) FontWeight.SemiBold else FontWeight.Normal,
+                            modifier = Modifier.padding(vertical = 5.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = BluePrimary,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text("我知道了", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }

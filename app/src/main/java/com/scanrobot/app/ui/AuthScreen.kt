@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Brush
 import coil.compose.AsyncImage
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -60,18 +61,21 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
 
     var captchaResult by remember { mutableStateOf<CaptchaResult?>(null) }
     var captchaCode by remember { mutableStateOf("") }
-    var slidingVerified by remember { mutableStateOf(false) }
+    // 弹出式滑动验证码
+    var showSlidingDialog by remember { mutableStateOf(false) }
+    var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     // 登录/注册独立的验证码开关（新版），兜底使用老的 captchaEnabled
     val loginCaptchaEnabled = appInfo?.captchaLoginEnabled ?: appInfo?.captchaEnabled ?: false
     val registerCaptchaEnabled = appInfo?.captchaRegisterEnabled ?: appInfo?.captchaEnabled ?: false
     val captchaEnabled = if (screenMode == "login") loginCaptchaEnabled else registerCaptchaEnabled
     val slidingLoginEnabled = appInfo?.slidingLoginEnabled ?: false
     val slidingRegisterEnabled = appInfo?.slidingRegisterEnabled ?: false
-    val slidingEnabled = if (screenMode == "login") slidingLoginEnabled else (screenMode == "register" && slidingRegisterEnabled)
+    val slidingForgotEnabled = appInfo?.slidingForgotEnabled ?: slidingLoginEnabled
     val registrationRequired = appInfo?.registrationRequired ?: true
 
     LaunchedEffect(screenMode) {
-        slidingVerified = false
+        showSlidingDialog = false
+        pendingAction = null
     }
 
     LaunchedEffect(screenMode, loginCaptchaEnabled, registerCaptchaEnabled) {
@@ -145,16 +149,53 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
                             captchaResult = withContext(Dispatchers.IO) { ApiClient.fetchCaptcha() }
                         }
                     },
-                    slidingEnabled = slidingLoginEnabled,
-                    slidingVerified = slidingVerified,
-                    onSlidingVerify = { slidingVerified = true },
                     onLogin = {
                         if (username.isBlank() || password.isBlank()) {
                             message = "请输入用户名和密码"; messageIsError = true
-                        } else if (slidingLoginEnabled && !slidingVerified) {
-                            message = "请先完成滑动验证"; messageIsError = true
                         } else if (captchaEnabled && captchaCode.isBlank()) {
                             message = "请输入验证码"; messageIsError = true
+                        } else if (slidingLoginEnabled) {
+                            pendingAction = {
+                                scope.launch {
+                                    isLoading = true
+                                    message = ""
+                                    try {
+                                        Log.d("AuthScreen", "Starting login for: $username")
+                                        val result = withContext(Dispatchers.IO) {
+                                            ApiClient.login(
+                                                username, password,
+                                                captchaResult?.captchaId ?: "",
+                                                captchaCode
+                                            )
+                                        }
+                                        Log.d("AuthScreen", "Login result: success=${result.success}, msg=${result.message}")
+                                        if (result.success && !result.token.isNullOrEmpty()) {
+                                            val sharedPrefs = context.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE)
+                                            val editor = sharedPrefs.edit()
+                                            editor.putString("auth_token", result.token)
+                                            editor.putString("auth_username", result.username ?: username)
+                                            if (result.userId > 0) {
+                                                editor.putInt("auth_user_id", result.userId)
+                                            }
+                                            editor.commit()
+                                            message = "登录成功"; messageIsError = false
+                                            onLoginSuccess()
+                                        } else {
+                                            message = result.message; messageIsError = true
+                                            if (captchaEnabled) {
+                                                captchaCode = ""
+                                                captchaResult = withContext(Dispatchers.IO) { ApiClient.fetchCaptcha() }
+                                            }
+                                        }
+                                    } catch (e: Throwable) {
+                                        Log.e("AuthScreen", "Login exception", e)
+                                        message = "登录失败: ${e.message ?: "未知错误"}"; messageIsError = true
+                                    } finally {
+                                        isLoading = false
+                                    }
+                                }
+                            }
+                            showSlidingDialog = true
                         } else {
                             scope.launch {
                                 isLoading = true
@@ -222,48 +263,52 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
                             captchaResult = withContext(Dispatchers.IO) { ApiClient.fetchCaptcha() }
                         }
                     },
-                    slidingEnabled = slidingRegisterEnabled,
-                    slidingVerified = slidingVerified,
-                    onSlidingVerify = { slidingVerified = true },
                     onRegister = {
                         when {
                             username.length < 3 -> { message = "用户名至少3个字符"; messageIsError = true }
                             password.length < 6 -> { message = "密码至少6位"; messageIsError = true }
                             password != confirmPassword -> { message = "两次密码不一致"; messageIsError = true }
                             email.isBlank() || !email.contains("@") -> { message = "请输入有效邮箱"; messageIsError = true }
-                            slidingRegisterEnabled && !slidingVerified -> { message = "请先完成滑动验证"; messageIsError = true }
                             captchaEnabled && captchaCode.isBlank() -> { message = "请输入验证码"; messageIsError = true }
                             else -> {
-                                scope.launch {
-                                    isLoading = true
-                                    message = ""
-                                    try {
-                                        Log.d("AuthScreen", "Starting register for: $username")
-                                        val result = withContext(Dispatchers.IO) {
-                                            ApiClient.register(
-                                                username, password, email,
-                                                captchaResult?.captchaId ?: "",
-                                                captchaCode
-                                            )
-                                        }
-                                        Log.d("AuthScreen", "Register result: success=${result.success}")
-                                        if (result.success) {
-                                            message = "注册成功，请登录"; messageIsError = false
-                                            screenMode = "login"
-                                            password = ""; confirmPassword = ""; captchaCode = ""
-                                        } else {
-                                            message = result.message; messageIsError = true
-                                            if (captchaEnabled) {
-                                                captchaCode = ""
-                                                captchaResult = withContext(Dispatchers.IO) { ApiClient.fetchCaptcha() }
+                                val doRegister = {
+                                    scope.launch {
+                                        isLoading = true
+                                        message = ""
+                                        try {
+                                            Log.d("AuthScreen", "Starting register for: $username")
+                                            val result = withContext(Dispatchers.IO) {
+                                                ApiClient.register(
+                                                    username, password, email,
+                                                    captchaResult?.captchaId ?: "",
+                                                    captchaCode
+                                                )
                                             }
+                                            Log.d("AuthScreen", "Register result: success=${result.success}")
+                                            if (result.success) {
+                                                message = "注册成功，请登录"; messageIsError = false
+                                                screenMode = "login"
+                                                password = ""; confirmPassword = ""; captchaCode = ""
+                                            } else {
+                                                message = result.message; messageIsError = true
+                                                if (captchaEnabled) {
+                                                    captchaCode = ""
+                                                    captchaResult = withContext(Dispatchers.IO) { ApiClient.fetchCaptcha() }
+                                                }
+                                            }
+                                        } catch (e: Throwable) {
+                                            Log.e("AuthScreen", "Register exception", e)
+                                            message = "注册失败: ${e.message ?: "未知错误"}"; messageIsError = true
+                                        } finally {
+                                            isLoading = false
                                         }
-                                    } catch (e: Throwable) {
-                                        Log.e("AuthScreen", "Register exception", e)
-                                        message = "注册失败: ${e.message ?: "未知错误"}"; messageIsError = true
-                                    } finally {
-                                        isLoading = false
                                     }
+                                }
+                                if (slidingRegisterEnabled) {
+                                    pendingAction = doRegister
+                                    showSlidingDialog = true
+                                } else {
+                                    doRegister()
                                 }
                             }
                         }
@@ -304,27 +349,35 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
                             resetToken.isBlank() -> { message = "请输入重置码"; messageIsError = true }
                             newPassword.length < 6 -> { message = "新密码至少6位"; messageIsError = true }
                             else -> {
-                                scope.launch {
-                                    isLoading = true; message = ""
-                                    try {
-                                        Log.d("AuthScreen", "Starting resetPassword")
-                                        val result = withContext(Dispatchers.IO) {
-                                            ApiClient.resetPassword(resetToken, newPassword)
+                                val doReset = {
+                                    scope.launch {
+                                        isLoading = true; message = ""
+                                        try {
+                                            Log.d("AuthScreen", "Starting resetPassword")
+                                            val result = withContext(Dispatchers.IO) {
+                                                ApiClient.resetPassword(resetToken, newPassword)
+                                            }
+                                            Log.d("AuthScreen", "ResetPassword result: success=${result.success}")
+                                            if (result.success) {
+                                                message = "密码重置成功，请登录"; messageIsError = false
+                                                screenMode = "login"
+                                                resetToken = ""; newPassword = ""
+                                            } else {
+                                                message = result.message; messageIsError = true
+                                            }
+                                        } catch (e: Throwable) {
+                                            Log.e("AuthScreen", "ResetPassword exception", e)
+                                            message = "重置失败: ${e.message ?: "未知错误"}"; messageIsError = true
+                                        } finally {
+                                            isLoading = false
                                         }
-                                        Log.d("AuthScreen", "ResetPassword result: success=${result.success}")
-                                        if (result.success) {
-                                            message = "密码重置成功，请登录"; messageIsError = false
-                                            screenMode = "login"
-                                            resetToken = ""; newPassword = ""
-                                        } else {
-                                            message = result.message; messageIsError = true
-                                        }
-                                    } catch (e: Throwable) {
-                                        Log.e("AuthScreen", "ResetPassword exception", e)
-                                        message = "重置失败: ${e.message ?: "未知错误"}"; messageIsError = true
-                                    } finally {
-                                        isLoading = false
                                     }
+                                }
+                                if (slidingForgotEnabled) {
+                                    pendingAction = doReset
+                                    showSlidingDialog = true
+                                } else {
+                                    doReset()
                                 }
                             }
                         }
@@ -345,6 +398,20 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
             }
             Spacer(modifier = Modifier.height(40.dp))
         }
+    }
+
+    if (showSlidingDialog) {
+        SlidingCaptchaDialog(
+            onDismiss = {
+                showSlidingDialog = false
+                pendingAction = null
+            },
+            onVerify = {
+                showSlidingDialog = false
+                pendingAction?.invoke()
+                pendingAction = null
+            }
+        )
     }
 }
 
@@ -419,53 +486,114 @@ private fun CaptchaSection(
 }
 
 @Composable
-private fun SlidingCaptcha(verified: Boolean, onVerify: () -> Unit) {
+private fun SlidingCaptchaDialog(onDismiss: () -> Unit, onVerify: () -> Unit) {
     val density = androidx.compose.ui.platform.LocalDensity.current
-    val trackWidthPx = with(density) { 280.dp.toPx() }
+    val dialogWidth = 300.dp
+    val trackWidthPx = with(density) { (dialogWidth - 24.dp).toPx() }
     val thumbSizePx = with(density) { 44.dp.toPx() }
     val maxOffsetPx = trackWidthPx - thumbSizePx
     var offsetX by remember { mutableStateOf(0f) }
+    var verified by remember { mutableStateOf(false) }
+    var refreshKey by remember { mutableStateOf(0) }
 
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text("滑动验证", fontSize = 13.sp, color = TextSecondary, modifier = Modifier.padding(bottom = 6.dp))
-        Box(
-            modifier = Modifier
-                .width(280.dp)
-                .height(44.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (verified) Color(0xFFE8F5E9) else Color(0xFFF5F5F5))
-                .border(0.5.dp, if (verified) Color(0xFF4CAF50) else BorderLight, RoundedCornerShape(8.dp))
+    val gradients = listOf(
+        listOf(Color(0xFF6BB8DD), Color(0xFF4A90D9)),
+        listOf(Color(0xFF8FD3A8), Color(0xFF5BAE7E)),
+        listOf(Color(0xFFF0A868), Color(0xFFE8784A)),
+        listOf(Color(0xFFA88BD8), Color(0xFF7B5DB8)),
+        listOf(Color(0xFF6DD5D5), Color(0xFF4AA8A8))
+    )
+    val currentGradient = gradients[refreshKey % gradients.size]
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.width(dialogWidth),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            Text(
-                if (verified) "验证成功" else "请按住滑块，拖动到最右边",
-                fontSize = 13.sp,
-                color = if (verified) Color(0xFF4CAF50) else TextSecondary,
-                modifier = Modifier.align(Alignment.Center)
-            )
-            Box(
-                modifier = Modifier
-                    .offset { IntOffset(if (verified) maxOffsetPx.toInt() else offsetX.toInt(), 0) }
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (verified) Color(0xFF4CAF50) else BluePrimary)
-                    .pointerInput(verified) {
-                        if (verified) return@pointerInput
-                        detectDragGestures(
-                            onDragEnd = {
-                                if (offsetX >= maxOffsetPx - 10f) {
-                                    onVerify()
-                                } else {
-                                    offsetX = 0f
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("安全验证", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text("×", fontSize = 20.sp, color = Color(0xFF999999), modifier = Modifier.clickable { onDismiss() })
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .padding(horizontal = 12.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Brush.verticalGradient(currentGradient))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.9f))
+                            .clickable {
+                                refreshKey++
+                                offsetX = 0f
+                                verified = false
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("↻", fontSize = 16.sp, color = BluePrimary, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (verified) Color(0xFFE8F5E9) else Color(0xFFF0F0F0))
+                ) {
+                    Text(
+                        if (verified) "验证成功" else "快完成验证",
+                        fontSize = 13.sp,
+                        color = if (verified) Color(0xFF4CAF50) else TextSecondary,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .offset { IntOffset(if (verified) maxOffsetPx.toInt() else offsetX.toInt(), 0) }
+                            .width(44.dp)
+                            .height(44.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (verified) Color(0xFF4CAF50) else BluePrimary)
+                            .pointerInput(verified, refreshKey) {
+                                if (verified) return@pointerInput
+                                detectDragGestures(
+                                    onDragEnd = {
+                                        if (offsetX >= maxOffsetPx - 10f) {
+                                            verified = true
+                                            onVerify()
+                                        } else {
+                                            offsetX = 0f
+                                        }
+                                    }
+                                ) { change, dragAmount ->
+                                    change.consume()
+                                    offsetX = (offsetX + dragAmount.x).coerceIn(0f, maxOffsetPx)
                                 }
-                            }
-                        ) { change, dragAmount ->
-                            change.consume()
-                            offsetX = (offsetX + dragAmount.x).coerceIn(0f, maxOffsetPx)
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("→", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("≫", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -482,9 +610,6 @@ private fun LoginContent(
     captchaCode: String,
     onCaptchaCodeChange: (String) -> Unit,
     onRefreshCaptcha: () -> Unit,
-    slidingEnabled: Boolean,
-    slidingVerified: Boolean,
-    onSlidingVerify: () -> Unit,
     onLogin: () -> Unit,
     onForgotPassword: () -> Unit,
     onSwitchToRegister: () -> Unit,
@@ -505,10 +630,7 @@ private fun LoginContent(
         isPassword = !showPassword, onTogglePassword = onTogglePassword
     )
 
-    if (slidingEnabled) {
-        Spacer(modifier = Modifier.height(16.dp))
-        SlidingCaptcha(verified = slidingVerified, onVerify = onSlidingVerify)
-    } else if (captchaEnabled) {
+    if (captchaEnabled) {
         Spacer(modifier = Modifier.height(16.dp))
         CaptchaSection(captchaResult, captchaCode, onCaptchaCodeChange, onRefreshCaptcha)
     }
@@ -581,9 +703,6 @@ private fun RegisterContent(
     captchaCode: String,
     onCaptchaCodeChange: (String) -> Unit,
     onRefreshCaptcha: () -> Unit,
-    slidingEnabled: Boolean,
-    slidingVerified: Boolean,
-    onSlidingVerify: () -> Unit,
     onRegister: () -> Unit,
     onSwitchToLogin: () -> Unit
 ) {
@@ -615,10 +734,7 @@ private fun RegisterContent(
         isPassword = !showPassword
     )
 
-    if (slidingEnabled) {
-        Spacer(modifier = Modifier.height(16.dp))
-        SlidingCaptcha(verified = slidingVerified, onVerify = onSlidingVerify)
-    } else if (captchaEnabled) {
+    if (captchaEnabled) {
         Spacer(modifier = Modifier.height(16.dp))
         CaptchaSection(captchaResult, captchaCode, onCaptchaCodeChange, onRefreshCaptcha)
     }
