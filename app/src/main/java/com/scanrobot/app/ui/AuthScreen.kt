@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -493,6 +494,186 @@ private fun CaptchaSection(
     }
 }
 
+private const val SCENE_COUNT = 6
+
+private fun DrawScope.drawCaptchaScene(sceneIndex: Int) {
+    when (sceneIndex % SCENE_COUNT) {
+        0 -> drawSunsetScene()
+        1 -> drawOceanScene()
+        2 -> drawNightSkyScene()
+        3 -> drawForestScene()
+        4 -> drawMountainLakeScene()
+        5 -> drawAuroraScene()
+    }
+}
+
+private fun DrawScope.drawSunsetScene() {
+    drawRect(brush = Brush.verticalGradient(listOf(Color(0xFFFFB347), Color(0xFFE8735A), Color(0xFF8B4D8E))))
+    val sunX = size.width * 0.65f
+    val sunY = size.height * 0.35f
+    drawCircle(color = Color(0xFFFFE082), radius = size.minDimension * 0.18f, center = Offset(sunX, sunY))
+    drawCircle(color = Color(0xFFFFCC02), radius = size.minDimension * 0.13f, center = Offset(sunX, sunY))
+    val mountainPath = Path().apply {
+        moveTo(0f, size.height)
+        lineTo(size.width * 0.15f, size.height * 0.55f)
+        lineTo(size.width * 0.3f, size.height * 0.7f)
+        lineTo(size.width * 0.5f, size.height * 0.4f)
+        lineTo(size.width * 0.7f, size.height * 0.65f)
+        lineTo(size.width * 0.85f, size.height * 0.5f)
+        lineTo(size.width, size.height * 0.6f)
+        lineTo(size.width, size.height)
+        close()
+    }
+    drawPath(mountainPath, color = Color(0xFF4A2C5E))
+    val mountainPath2 = Path().apply {
+        moveTo(0f, size.height)
+        lineTo(size.width * 0.2f, size.height * 0.75f)
+        lineTo(size.width * 0.45f, size.height * 0.85f)
+        lineTo(size.width * 0.65f, size.height * 0.72f)
+        lineTo(size.width * 0.9f, size.height * 0.8f)
+        lineTo(size.width, size.height * 0.78f)
+        lineTo(size.width, size.height)
+        close()
+    }
+    drawPath(mountainPath2, color = Color(0xFF2D1B3D))
+}
+
+private fun DrawScope.drawOceanScene() {
+    drawRect(brush = Brush.verticalGradient(listOf(Color(0xFF87CEEB), Color(0xFF4A90D9), Color(0xFF1E5C8A))))
+    drawCircle(color = Color(0xFFFFE082), radius = size.minDimension * 0.12f, center = Offset(size.width * 0.2f, size.height * 0.2f))
+    for (i in 0..4) {
+        val y = size.height * (0.6f + i * 0.08f)
+        val wavePath = Path().apply {
+            moveTo(0f, y)
+            cubicTo(size.width * 0.25f, y - 6f, size.width * 0.5f, y + 6f, size.width * 0.75f, y - 3f)
+            lineTo(size.width, y)
+            lineTo(size.width, size.height)
+            lineTo(0f, size.height)
+            close()
+        }
+        drawPath(wavePath, color = Color.White.copy(alpha = 0.15f - i * 0.02f))
+    }
+    drawCircle(color = Color.White.copy(alpha = 0.6f), radius = 2f, center = Offset(size.width * 0.3f, size.height * 0.7f))
+    drawCircle(color = Color.White.copy(alpha = 0.5f), radius = 1.5f, center = Offset(size.width * 0.6f, size.height * 0.75f))
+    drawCircle(color = Color.White.copy(alpha = 0.7f), radius = 2.5f, center = Offset(size.width * 0.8f, size.height * 0.68f))
+}
+
+private fun DrawScope.drawNightSkyScene() {
+    drawRect(brush = Brush.verticalGradient(listOf(Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460))))
+    val moonX = size.width * 0.75f
+    val moonY = size.height * 0.25f
+    drawCircle(color = Color(0xFFFFF9C4), radius = size.minDimension * 0.12f, center = Offset(moonX, moonY))
+    drawCircle(color = Color(0xFFE8EAF6), radius = size.minDimension * 0.1f, center = Offset(moonX - 4f, moonY - 2f))
+    val stars = listOf(
+        0.05f to 0.1f, 0.15f to 0.25f, 0.25f to 0.08f, 0.35f to 0.15f,
+        0.45f to 0.3f, 0.55f to 0.12f, 0.08f to 0.4f, 0.3f to 0.45f,
+        0.5f to 0.5f, 0.65f to 0.35f, 0.85f to 0.45f, 0.92f to 0.2f,
+        0.12f to 0.55f, 0.42f to 0.6f, 0.7f to 0.55f, 0.88f to 0.6f
+    )
+    for ((sx, sy) in stars) {
+        drawCircle(color = Color.White.copy(alpha = 0.8f), radius = 1.5f, center = Offset(size.width * sx, size.height * sy))
+    }
+    for ((sx, sy) in stars.filterIndexed { i, _ -> i % 3 == 0 }) {
+        drawCircle(color = Color(0xFFFFE082).copy(alpha = 0.7f), radius = 2f, center = Offset(size.width * sx, size.height * sy))
+    }
+}
+
+private fun DrawScope.drawForestScene() {
+    drawRect(brush = Brush.verticalGradient(listOf(Color(0xFF81C784), Color(0xFF4CAF50), Color(0xFF2E7D32))))
+    drawCircle(color = Color(0xFFFFE082).copy(alpha = 0.4f), radius = size.minDimension * 0.15f, center = Offset(size.width * 0.8f, size.height * 0.2f))
+    val treePositions = listOf(0.08f to 0.7f, 0.22f to 0.65f, 0.38f to 0.72f, 0.55f to 0.68f, 0.72f to 0.75f, 0.88f to 0.7f)
+    for ((tx, ty) in treePositions) {
+        val cx = size.width * tx
+        val cy = size.height * ty
+        drawRect(color = Color(0xFF4E342E), topLeft = Offset(cx - 2f, cy), size = Size(4f, size.height - cy))
+        val treePath = Path().apply {
+            moveTo(cx, cy - size.height * 0.22f)
+            lineTo(cx - size.width * 0.06f, cy)
+            lineTo(cx + size.width * 0.06f, cy)
+            close()
+            moveTo(cx, cy - size.height * 0.15f)
+            lineTo(cx - size.width * 0.08f, cy + size.height * 0.02f)
+            lineTo(cx + size.width * 0.08f, cy + size.height * 0.02f)
+            close()
+        }
+        drawPath(treePath, color = Color(0xFF1B5E20))
+    }
+}
+
+private fun DrawScope.drawMountainLakeScene() {
+    drawRect(brush = Brush.verticalGradient(listOf(Color(0xFFB3E5FC), Color(0xFF4FC3F7), Color(0xFF0277BD))))
+    drawCircle(color = Color(0xFFFFE082).copy(alpha = 0.5f), radius = size.minDimension * 0.1f, center = Offset(size.width * 0.75f, size.height * 0.2f))
+    val snowMountain = Path().apply {
+        moveTo(0f, size.height * 0.55f)
+        lineTo(size.width * 0.2f, size.height * 0.25f)
+        lineTo(size.width * 0.3f, size.height * 0.35f)
+        lineTo(size.width * 0.5f, size.height * 0.15f)
+        lineTo(size.width * 0.65f, size.height * 0.3f)
+        lineTo(size.width * 0.85f, size.height * 0.2f)
+        lineTo(size.width, size.height * 0.35f)
+        lineTo(size.width, size.height * 0.55f)
+        close()
+    }
+    drawPath(snowMountain, color = Color(0xFF90A4AE))
+    val snowCap = Path().apply {
+        moveTo(size.width * 0.42f, size.height * 0.22f)
+        lineTo(size.width * 0.5f, size.height * 0.15f)
+        lineTo(size.width * 0.58f, size.height * 0.22f)
+        lineTo(size.width * 0.55f, size.height * 0.25f)
+        lineTo(size.width * 0.5f, size.height * 0.2f)
+        lineTo(size.width * 0.45f, size.height * 0.25f)
+        close()
+    }
+    drawPath(snowCap, color = Color.White)
+    drawRect(color = Color(0xFF01579B), topLeft = Offset(0f, size.height * 0.55f), size = Size(size.width, size.height * 0.45f))
+    for (i in 0..3) {
+        val y = size.height * (0.6f + i * 0.08f)
+        val wavePath = Path().apply {
+            moveTo(0f, y)
+            cubicTo(size.width * 0.3f, y - 4f, size.width * 0.6f, y + 4f, size.width, y)
+        }
+        drawPath(wavePath, color = Color.White.copy(alpha = 0.2f), style = Stroke(width = 2f))
+    }
+}
+
+private fun DrawScope.drawAuroraScene() {
+    drawRect(brush = Brush.verticalGradient(listOf(Color(0xFF0D1B2A), Color(0xFF1B3A5B), Color(0xFF2D527C))))
+    val stars = listOf(0.1f to 0.05f, 0.3f to 0.12f, 0.5f to 0.06f, 0.7f to 0.15f, 0.9f to 0.08f, 0.2f to 0.2f, 0.6f to 0.25f, 0.85f to 0.3f)
+    for ((sx, sy) in stars) {
+        drawCircle(color = Color.White.copy(alpha = 0.7f), radius = 1.5f, center = Offset(size.width * sx, size.height * sy))
+    }
+    for (i in 0..3) {
+        val auroraPath = Path().apply {
+            moveTo(0f, size.height * (0.3f + i * 0.08f))
+            cubicTo(
+                size.width * 0.3f, size.height * (0.15f + i * 0.05f),
+                size.width * 0.6f, size.height * (0.4f + i * 0.08f),
+                size.width, size.height * (0.2f + i * 0.06f)
+            )
+            lineTo(size.width, size.height * (0.4f + i * 0.08f))
+            cubicTo(
+                size.width * 0.6f, size.height * (0.55f + i * 0.08f),
+                size.width * 0.3f, size.height * (0.35f + i * 0.05f),
+                0f, size.height * (0.45f + i * 0.08f)
+            )
+            close()
+        }
+        val auroraColors = listOf(Color(0xFF00E676), Color(0xFF00B0FF), Color(0xFF7C4DFF), Color(0xFFE040FB))
+        drawPath(auroraPath, color = auroraColors[i].copy(alpha = 0.2f))
+    }
+    val mountainPath = Path().apply {
+        moveTo(0f, size.height)
+        lineTo(size.width * 0.2f, size.height * 0.7f)
+        lineTo(size.width * 0.4f, size.height * 0.78f)
+        lineTo(size.width * 0.6f, size.height * 0.68f)
+        lineTo(size.width * 0.8f, size.height * 0.75f)
+        lineTo(size.width, size.height * 0.72f)
+        lineTo(size.width, size.height)
+        close()
+    }
+    drawPath(mountainPath, color = Color(0xFF1A1A2E))
+}
+
 @Composable
 private fun SlidingCaptchaDialog(onDismiss: () -> Unit, onVerify: () -> Unit) {
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -518,14 +699,7 @@ private fun SlidingCaptchaDialog(onDismiss: () -> Unit, onVerify: () -> Unit) {
     var sliderX by remember(refreshKey) { mutableStateOf(0f) }
     var verified by remember(refreshKey) { mutableStateOf(false) }
 
-    val gradients = listOf(
-        listOf(Color(0xFF6BB8DD), Color(0xFF4A90D9)),
-        listOf(Color(0xFF8FD3A8), Color(0xFF5BAE7E)),
-        listOf(Color(0xFFF0A868), Color(0xFFE8784A)),
-        listOf(Color(0xFFA88BD8), Color(0xFF7B5DB8)),
-        listOf(Color(0xFF6DD5D5), Color(0xFF4AA8A8))
-    )
-    val currentGradient = gradients[refreshKey % gradients.size]
+    val sceneIndex = refreshKey
     val pieceY = with(density) { ((imageHeight - pieceSize) / 2).toPx() }
     val pieceX = (sliderX / maxSliderOffsetPx) * pieceMaxX
 
@@ -554,10 +728,7 @@ private fun SlidingCaptchaDialog(onDismiss: () -> Unit, onVerify: () -> Unit) {
                         .clip(RoundedCornerShape(8.dp))
                 ) {
                     Canvas(modifier = Modifier.fillMaxSize()) {
-                        drawRoundRect(
-                            brush = Brush.verticalGradient(currentGradient),
-                            cornerRadius = CornerRadius(8f, 8f)
-                        )
+                        drawCaptchaScene(sceneIndex)
 
                         drawRoundRect(
                             color = Color.Black.copy(alpha = 0.35f),
@@ -566,7 +737,7 @@ private fun SlidingCaptchaDialog(onDismiss: () -> Unit, onVerify: () -> Unit) {
                             cornerRadius = CornerRadius(6f, 6f)
                         )
                         drawRoundRect(
-                            color = Color.White.copy(alpha = 0.5f),
+                            color = Color.White.copy(alpha = 0.6f),
                             topLeft = Offset(targetX, pieceY),
                             size = Size(pieceSizePx, pieceSizePx),
                             cornerRadius = CornerRadius(6f, 6f),
@@ -574,7 +745,7 @@ private fun SlidingCaptchaDialog(onDismiss: () -> Unit, onVerify: () -> Unit) {
                         )
 
                         drawRoundRect(
-                            color = Color.White.copy(alpha = 0.85f),
+                            color = Color.White.copy(alpha = 0.75f),
                             topLeft = Offset(pieceX, pieceY),
                             size = Size(pieceSizePx, pieceSizePx),
                             cornerRadius = CornerRadius(6f, 6f)
