@@ -63,7 +63,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
     var captchaCode by remember { mutableStateOf("") }
     // 弹出式滑动验证码
     var showSlidingDialog by remember { mutableStateOf(false) }
-    var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var pendingAction by remember { mutableStateOf<(() -> Any)?>(null) }
     // 登录/注册独立的验证码开关（新版），兜底使用老的 captchaEnabled
     val loginCaptchaEnabled = appInfo?.captchaLoginEnabled ?: appInfo?.captchaEnabled ?: false
     val registerCaptchaEnabled = appInfo?.captchaRegisterEnabled ?: appInfo?.captchaEnabled ?: false
