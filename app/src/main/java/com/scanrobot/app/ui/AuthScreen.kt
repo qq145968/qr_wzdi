@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,6 +15,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Brush
@@ -26,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -35,6 +41,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.abs
+import kotlin.random.Random
 import com.scanrobot.app.data.AppInfo
 import com.scanrobot.app.data.CaptchaResult
 import com.scanrobot.app.network.ApiClient
@@ -489,12 +497,26 @@ private fun CaptchaSection(
 private fun SlidingCaptchaDialog(onDismiss: () -> Unit, onVerify: () -> Unit) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     val dialogWidth = 300.dp
-    val trackWidthPx = with(density) { (dialogWidth - 24.dp).toPx() }
-    val thumbSizePx = with(density) { 44.dp.toPx() }
-    val maxOffsetPx = trackWidthPx - thumbSizePx
-    var offsetX by remember { mutableStateOf(0f) }
-    var verified by remember { mutableStateOf(false) }
+    val padding = 12.dp
+    val imageHeight = 130.dp
+    val pieceSize = 36.dp
+    val sliderHeight = 44.dp
+    val sliderHandleSize = 44.dp
+
+    val imageWidthPx = with(density) { (dialogWidth - padding * 2).toPx() }
+    val pieceSizePx = with(density) { pieceSize.toPx() }
+    val sliderWidthPx = imageWidthPx
+    val handleSizePx = with(density) { sliderHandleSize.toPx() }
+    val maxSliderOffsetPx = sliderWidthPx - handleSizePx
+    val pieceMaxX = imageWidthPx - pieceSizePx
+    val tolerancePx = with(density) { 12.dp.toPx() }
+
     var refreshKey by remember { mutableStateOf(0) }
+    var targetX by remember(refreshKey) {
+        mutableStateOf(Random.nextFloat() * (pieceMaxX - pieceSizePx - 30f) + pieceSizePx + 30f)
+    }
+    var sliderX by remember(refreshKey) { mutableStateOf(0f) }
+    var verified by remember(refreshKey) { mutableStateOf(false) }
 
     val gradients = listOf(
         listOf(Color(0xFF6BB8DD), Color(0xFF4A90D9)),
@@ -504,6 +526,8 @@ private fun SlidingCaptchaDialog(onDismiss: () -> Unit, onVerify: () -> Unit) {
         listOf(Color(0xFF6DD5D5), Color(0xFF4AA8A8))
     )
     val currentGradient = gradients[refreshKey % gradients.size]
+    val pieceY = with(density) { ((imageHeight - pieceSize) / 2).toPx() }
+    val pieceX = (sliderX / maxSliderOffsetPx) * pieceMaxX
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -525,26 +549,58 @@ private fun SlidingCaptchaDialog(onDismiss: () -> Unit, onVerify: () -> Unit) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(120.dp)
-                        .padding(horizontal = 12.dp)
+                        .height(imageHeight)
+                        .padding(horizontal = padding)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Brush.verticalGradient(currentGradient))
                 ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        drawRoundRect(
+                            brush = Brush.verticalGradient(currentGradient),
+                            cornerRadius = CornerRadius(8f, 8f)
+                        )
+
+                        drawRoundRect(
+                            color = Color.Black.copy(alpha = 0.35f),
+                            topLeft = Offset(targetX, pieceY),
+                            size = Size(pieceSizePx, pieceSizePx),
+                            cornerRadius = CornerRadius(6f, 6f)
+                        )
+                        drawRoundRect(
+                            color = Color.White.copy(alpha = 0.5f),
+                            topLeft = Offset(targetX, pieceY),
+                            size = Size(pieceSizePx, pieceSizePx),
+                            cornerRadius = CornerRadius(6f, 6f),
+                            style = Stroke(width = 2f)
+                        )
+
+                        drawRoundRect(
+                            color = Color.White.copy(alpha = 0.85f),
+                            topLeft = Offset(pieceX, pieceY),
+                            size = Size(pieceSizePx, pieceSizePx),
+                            cornerRadius = CornerRadius(6f, 6f)
+                        )
+                        drawRoundRect(
+                            color = Color(0xFF4A90D9),
+                            topLeft = Offset(pieceX, pieceY),
+                            size = Size(pieceSizePx, pieceSizePx),
+                            cornerRadius = CornerRadius(6f, 6f),
+                            style = Stroke(width = 2f)
+                        )
+                    }
+
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .size(28.dp)
+                            .padding(6.dp)
+                            .size(26.dp)
                             .clip(CircleShape)
                             .background(Color.White.copy(alpha = 0.9f))
                             .clickable {
                                 refreshKey++
-                                offsetX = 0f
-                                verified = false
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("↻", fontSize = 16.sp, color = BluePrimary, fontWeight = FontWeight.Bold)
+                        Text("↻", fontSize = 15.sp, color = BluePrimary, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -553,38 +609,39 @@ private fun SlidingCaptchaDialog(onDismiss: () -> Unit, onVerify: () -> Unit) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp)
-                        .height(44.dp)
+                        .padding(horizontal = padding)
+                        .height(sliderHeight)
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (verified) Color(0xFFE8F5E9) else Color(0xFFF0F0F0))
                 ) {
                     Text(
-                        if (verified) "验证成功" else "快完成验证",
+                        if (verified) "验证成功" else "拖动滑块完成拼图",
                         fontSize = 13.sp,
                         color = if (verified) Color(0xFF4CAF50) else TextSecondary,
                         modifier = Modifier.align(Alignment.Center)
                     )
                     Box(
                         modifier = Modifier
-                            .offset { IntOffset(if (verified) maxOffsetPx.toInt() else offsetX.toInt(), 0) }
-                            .width(44.dp)
-                            .height(44.dp)
+                            .offset { IntOffset(if (verified) maxSliderOffsetPx.toInt() else sliderX.toInt(), 0) }
+                            .width(sliderHandleSize)
+                            .height(sliderHeight)
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (verified) Color(0xFF4CAF50) else BluePrimary)
                             .pointerInput(verified, refreshKey) {
                                 if (verified) return@pointerInput
                                 detectDragGestures(
                                     onDragEnd = {
-                                        if (offsetX >= maxOffsetPx - 10f) {
+                                        val currentPieceX = (sliderX / maxSliderOffsetPx) * pieceMaxX
+                                        if (abs(currentPieceX - targetX) < tolerancePx) {
                                             verified = true
                                             onVerify()
                                         } else {
-                                            offsetX = 0f
+                                            sliderX = 0f
                                         }
                                     }
                                 ) { change, dragAmount ->
                                     change.consume()
-                                    offsetX = (offsetX + dragAmount.x).coerceIn(0f, maxOffsetPx)
+                                    sliderX = (sliderX + dragAmount.x).coerceIn(0f, maxSliderOffsetPx)
                                 }
                             },
                         contentAlignment = Alignment.Center
