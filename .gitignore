@@ -52,3 +52,18 @@ google-services.json
 
 # Gradle wrapper
 gradle/wrapper/gradle-wrapper.jar
+
+# Local tools (git, jdk, sdk copies)
+tools/git/
+tools/jdk/
+tools/android-sdk/
+tools/gradle_home/
+tools/temp/
+
+# Build logs
+build_logs/
+
+# Old debug scripts (contain tokens, not needed)
+tools/*.py
+tools/*.ps1
+tools/*.bat
