@@ -199,6 +199,12 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
                 readMessageIds = newReadIds
                 appInfo = appInfo!!.copy(unreadCount = 0)
                 showMessageDialog = false
+            },
+            onClear = {
+                sharedPrefs.edit().remove("cached_app_info").remove("read_message_ids").commit()
+                readMessageIds = emptySet()
+                appInfo = appInfo!!.copy(messages = emptyList(), unreadCount = 0)
+                showMessageDialog = false
             }
         )
     }
@@ -783,28 +789,39 @@ private fun ProfileTab(
 }
 
 @Composable
-private fun MessageListDialog(messages: List<AppMessage>, onDismiss: () -> Unit) {
+private fun MessageListDialog(messages: List<AppMessage>, onDismiss: () -> Unit, onClear: () -> Unit = {}) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("消息通知", fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.width(8.dp))
-                val unread = messages.count { !it.read }
-                if (unread > 0) {
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clip(CircleShape)
-                            .background(DangerRed),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            if (unread > 99) "99+" else unread.toString(),
-                            fontSize = 10.sp,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("消息通知", fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    val unread = messages.count { !it.read }
+                    if (unread > 0) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(DangerRed),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                if (unread > 99) "99+" else unread.toString(),
+                                fontSize = 10.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+                if (messages.isNotEmpty()) {
+                    TextButton(onClick = onClear) {
+                        Text("清空", color = DangerRed, fontSize = 14.sp)
                     }
                 }
             }
