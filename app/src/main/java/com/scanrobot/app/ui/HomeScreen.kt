@@ -9,6 +9,7 @@ import android.database.Cursor
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Environment
+import android.os.Process
 import androidx.core.content.FileProvider
 import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -61,6 +62,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.scanrobot.app.BuildConfig
 import com.scanrobot.app.data.AppInfo
 import com.scanrobot.app.data.AppMessage
@@ -86,6 +89,8 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
 
     var showMessageDialog by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
+    var showClearConfirm by remember { mutableStateOf(false) }
+    val clearState by viewModel.clearState.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val sharedPrefs = remember { context.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE) }
@@ -136,7 +141,8 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
                     viewModel = viewModel,
                     appInfo = appInfo,
                     onMessageClick = { showMessageDialog = true },
-                    onLogout = onLogout
+                    onLogout = onLogout,
+                    onClearData = { showClearConfirm = true }
                 )
             }
         }
@@ -217,6 +223,153 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
                 if (!version.forceUpdate) showUpdateDialog = false
             }
         )
+    }
+
+    // 清除数据 - 确认对话框
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("⚠️ 清除所有数据", fontWeight = FontWeight.Bold, color = DangerRed)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        "此操作将清除以下数据：",
+                        fontSize = 14.sp,
+                        color = TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    listOf("所有扫码记录与批次", "APP设置与偏好", "缓存文件与图片", "登录状态与账户信息").forEach {
+                        Text("• $it", fontSize = 13.sp, color = TextSecondary, modifier = Modifier.padding(vertical = 2.dp))
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "⚠️ 清除后APP将自动重启，此操作不可撤销！",
+                        fontSize = 13.sp,
+                        color = DangerRed,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearConfirm = false
+                    viewModel.clearAllAppData()
+                }) { Text("确认清除", color = DangerRed, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) { Text("取消") }
+            },
+            containerColor = BgWhite,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary
+        )
+    }
+
+    // 清除数据 - 进度对话框
+    if (clearState is ScanViewModel.ClearState.Clearing) {
+        Dialog(
+            onDismissRequest = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+        ) {
+            Card(
+                modifier = Modifier.size(200.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = BgWhite)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = BluePrimary,
+                        strokeWidth = 3.dp,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "正在清除数据...",
+                        fontSize = 15.sp,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "请勿关闭应用",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                }
+            }
+        }
+    }
+
+    // 清除数据 - 完成对话框
+    if (clearState is ScanViewModel.ClearState.Complete) {
+        val clearedMB = (clearState as ScanViewModel.ClearState.Complete).clearedMB
+        Dialog(
+            onDismissRequest = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+        ) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(32.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = BgWhite)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF4CAF50).copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("✓", fontSize = 32.sp, color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "清除完成",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        if (clearedMB > 0) "已清理 ${String.format("%.2f", clearedMB)} MB 数据" else "所有数据已清除",
+                        fontSize = 14.sp,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "APP将在点击后自动重启",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = {
+                            viewModel.resetClearState()
+                            val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                            intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                            context.startActivity(intent)
+                            Process.killProcess(Process.myPid())
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                    ) {
+                        Text("重启APP", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp))
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -583,7 +736,8 @@ private fun ProfileTab(
     viewModel: ScanViewModel,
     appInfo: AppInfo?,
     onMessageClick: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onClearData: () -> Unit = {}
 ) {
     val batches by viewModel.batches.collectAsState()
     val settings by viewModel.settings.collectAsState()
@@ -778,8 +932,7 @@ private fun ProfileTab(
                 ProfileRow("关于应用", "v${BuildConfig.VERSION_NAME}")
                 Divider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color(0xFFF0F0F0))
                 ProfileRowClickable("清除所有数据", "点击清除", DangerRed) {
-                    viewModel.clearAll()
-                    viewModel.showToast("所有数据已清除")
+                    onClearData()
                 }
             }
         }
