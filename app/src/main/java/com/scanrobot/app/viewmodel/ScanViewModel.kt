@@ -2,6 +2,7 @@
 
 import android.app.Application
 import android.content.ContentValues
+import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -58,6 +59,15 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
+
+    sealed class ClearState {
+        data object Idle : ClearState()
+        data object Clearing : ClearState()
+        data class Complete(val clearedMB: Double) : ClearState()
+    }
+
+    private val _clearState = MutableStateFlow<ClearState>(ClearState.Idle)
+    val clearState: StateFlow<ClearState> = _clearState.asStateFlow()
 
     private val recentCodes = mutableMapOf<String, Long>()
 
@@ -229,6 +239,52 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
             _scanList.value = emptyList()
         }
         return count
+    }
+
+    fun clearAllAppData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _clearState.value = ClearState.Clearing
+            val app = getApplication<Application>()
+            var clearedBytes = 0L
+
+            store.clearAll()
+
+            val prefs1 = app.getSharedPreferences("scan_robot", Context.MODE_PRIVATE)
+            val prefs2 = app.getSharedPreferences("scan_robot_prefs", Context.MODE_PRIVATE)
+            prefs1.edit().clear().apply()
+            prefs2.edit().clear().apply()
+
+            clearedBytes += clearDir(app.cacheDir)
+            clearedBytes += clearDir(File(app.filesDir, "images"))
+            clearedBytes += clearDir(File(app.filesDir, "photos"))
+            clearedBytes += clearDir(File(app.filesDir, "exports"))
+            clearedBytes += clearDir(File(app.filesDir, "qrcodes"))
+
+            _scanList.value = emptyList()
+            _batches.value = mutableListOf()
+            _settings.value = ScanSettings()
+
+            val clearedMB = clearedBytes / (1024.0 * 1024.0)
+            _clearState.value = ClearState.Complete(clearedMB)
+        }
+    }
+
+    private fun clearDir(dir: File): Long {
+        var cleared = 0L
+        if (dir.exists()) {
+            dir.listFiles()?.forEach { file ->
+                if (file.isDirectory) {
+                    cleared += clearDir(file)
+                }
+                cleared += file.length()
+                file.delete()
+            }
+        }
+        return cleared
+    }
+
+    fun resetClearState() {
+        _clearState.value = ClearState.Idle
     }
 
     fun exportHistory(): String {
