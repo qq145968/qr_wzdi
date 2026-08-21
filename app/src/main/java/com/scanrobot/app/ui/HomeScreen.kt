@@ -980,11 +980,7 @@ private fun QuickEntry(
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .shadow(
-                    elevation = 8.dp,
-                    shape = CircleShape,
-                    spotColor = gradientColors.first().copy(alpha = 0.4f)
-                )
+                .shadow(elevation = 6.dp, shape = CircleShape)
                 .clip(CircleShape)
                 .background(Brush.horizontalGradient(gradientColors)),
             contentAlignment = Alignment.Center
