@@ -83,21 +83,24 @@ class MainActivity : ComponentActivity() {
                 }
 
                 LaunchedEffect(Unit, isLoggedIn) {
-                    val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo(this@MainActivity) }
-                    if (info != null) {
-                        authAppInfo = info
-                        // 成功获取后写入缓存
-                        sharedPrefs.edit().putString("cached_app_info", info.toJsonString()).apply()
-                        // 后台删除用户后强制退出
-                        if (info.authInvalid && isLoggedIn) {
-                            sharedPrefs.edit()
-                                .remove("auth_token")
-                                .remove("auth_username")
-                                .remove("auth_user_id")
-                                .remove("cached_app_info")
-                                .commit()
-                            isLoggedIn = false
+                    while (isLoggedIn) {
+                        val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo(this@MainActivity) }
+                        if (info != null) {
+                            authAppInfo = info
+                            sharedPrefs.edit().putString("cached_app_info", info.toJsonString()).apply()
+                            // 后台封禁/删除用户后强制退出
+                            if (info.authInvalid && isLoggedIn) {
+                                sharedPrefs.edit()
+                                    .remove("auth_token")
+                                    .remove("auth_username")
+                                    .remove("auth_user_id")
+                                    .remove("cached_app_info")
+                                    .commit()
+                                isLoggedIn = false
+                                break
+                            }
                         }
+                        kotlinx.coroutines.delay(30_000L)
                     }
                 }
 
