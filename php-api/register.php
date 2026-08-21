@@ -1,104 +1,161 @@
 <?php
+/**
+ * APP 注册接口
+ * POST https://qr.wzdi.cn/api/register.php
+ * 参数: username, password, email, phone?, captcha_id?, captcha_code?
+ * 返回: { success, message, user:{user_id, username, email, token, source} }
+ */
 require_once __DIR__ . '/config.php';
 
-function getSetting($key, $default = '') {
-    $conn = getDb();
-    $stmt = $conn->prepare("SELECT setting_value FROM app_settings WHERE setting_key = ? LIMIT 1");
-    $stmt->bind_param("s", $key);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    if ($row = $result->fetch_assoc()) {
-        $stmt->close();
-        return $row['setting_value'];
-    }
-    $stmt->close();
+$raw = file_get_contents('php://input');
+$jsonReq = [];
+if ($raw) {
+    $j = json_decode($raw, true);
+    if (is_array($j)) $jsonReq = $j;
+}
+function req($key, $default = null) {
+    global $jsonReq;
+    if (isset($_POST[$key]) && $_POST[$key] !== '') return $_POST[$key];
+    if (isset($jsonReq[$key]) && $jsonReq[$key] !== '') return $jsonReq[$key];
     return $default;
 }
 
-$data = getPostData();
-$username = trim($data['username'] ?? '');
-$password = $data['password'] ?? '';
-$email = trim($data['email'] ?? '');
-$captchaId = trim($data['captcha_id'] ?? '');
-$captchaCode = trim($data['captcha_code'] ?? '');
-
-$registrationRequired = getSetting('registration_required', getSetting('app_registration_enabled', '1')) === '1';
-if (!$registrationRequired) {
-    jsonResponse(false, '当前已关闭注册，请联系管理员');
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    echo json_encode(['success' => false, 'message' => '仅支持 POST 请求'], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
-if (empty($username) || empty($password)) {
-    jsonResponse(false, '用户名和密码不能为空');
+$username    = trim(req('username') ?? '');
+$password    = req('password') ?? '';
+$email       = trim(strtolower(req('email') ?? ''));
+$phone       = trim(req('phone') ?? '');
+$captchaId   = trim(req('captcha_id') ?? '');
+$captchaCode = trim(req('captcha_code') ?? '');
+
+// 1. 读取 APP 后台开关
+try {
+    $rows = $db->fetchAll("SELECT setting_key, setting_value FROM app_settings");
+    $settings = [];
+    foreach ($rows as $r) $settings[$r['setting_key']] = $r['setting_value'];
+    $regEnabled     = !isset($settings['app_registration_enabled']) || $settings['app_registration_enabled'] === '1';
+    // 后台 APP 设置页使用 code_login_enabled / code_register_enabled；兼容旧键做兜底
+    $regCaptcha = $settings['code_register_enabled'] ?? null;
+    if ($regCaptcha === null || $regCaptcha === '') {
+        $regCaptcha = $settings['app_verification_enabled'] ?? $settings['captcha_enabled'] ?? '0';
+    }
+    $captchaEnabled = $regCaptcha === '1';
+} catch (Exception $e) {
+    $regEnabled = true;
+    $captchaEnabled = false;
+}
+if (!$regEnabled) {
+    echo json_encode(['success' => false, 'message' => '当前已关闭 APP 用户注册'], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
-if (strlen($username) < 3 || strlen($username) > 20) {
-    jsonResponse(false, '用户名长度需3-20个字符');
+// 2. 参数校验
+if (mb_strlen($username) < 3 || mb_strlen($username) > 20) {
+    echo json_encode(['success' => false, 'message' => '用户名长度需 3-20 个字符'], JSON_UNESCAPED_UNICODE);
+    exit;
 }
-
 if (strlen($password) < 6) {
-    jsonResponse(false, '密码长度至少6位');
+    echo json_encode(['success' => false, 'message' => '密码至少 6 位'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    echo json_encode(['success' => false, 'message' => '邮箱格式不正确'], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
-if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    jsonResponse(false, '邮箱格式不正确');
-}
-
-$captchaEnabled = getSetting('app_verification_enabled', getSetting('captcha_enabled', '0')) === '1';
+// 3. 验证码校验
 if ($captchaEnabled) {
     if (empty($captchaId) || empty($captchaCode)) {
-        jsonResponse(false, '请输入验证码');
+        echo json_encode(['success' => false, 'message' => '请输入验证码'], JSON_UNESCAPED_UNICODE);
+        exit;
     }
-    $db = getDb();
-    $stmt = $db->prepare("SELECT code, used FROM captcha_codes WHERE id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 10 MINUTE) LIMIT 1");
-    $stmt->bind_param('s', $captchaId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    if ($result->num_rows === 0) {
-        $stmt->close();
-        jsonResponse(false, '验证码已过期，请刷新');
+    $row = $db->fetchOne("SELECT id, code, used FROM captcha_codes WHERE id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 10 MINUTE) LIMIT 1", [$captchaId]);
+    if (!$row) {
+        echo json_encode(['success' => false, 'message' => '验证码已过期，请刷新'], JSON_UNESCAPED_UNICODE);
+        exit;
     }
-    $row = $result->fetch_assoc();
-    $stmt->close();
-    if ($row['used'] == 1) {
-        jsonResponse(false, '验证码已被使用，请刷新');
+    if ((int)$row['used'] === 1) {
+        echo json_encode(['success' => false, 'message' => '验证码已被使用，请刷新'], JSON_UNESCAPED_UNICODE);
+        exit;
     }
-    if (strcasecmp($row['code'], $captchaCode) !== 0) {
-        jsonResponse(false, '验证码错误');
+    if (strcasecmp((string)$row['code'], $captchaCode) !== 0) {
+        echo json_encode(['success' => false, 'message' => '验证码错误'], JSON_UNESCAPED_UNICODE);
+        exit;
     }
-    $updateStmt = $db->prepare("UPDATE captcha_codes SET used = 1 WHERE id = ?");
-    $updateStmt->bind_param('s', $captchaId);
-    $updateStmt->execute();
-    $updateStmt->close();
+    $db->query("UPDATE captcha_codes SET used = 1 WHERE id = ?", [$captchaId]);
 }
 
-$db = getDb();
-
-$check = $db->prepare('SELECT id FROM users WHERE username = ?');
-$check->bind_param('s', $username);
-$check->execute();
-$check->store_result();
-if ($check->num_rows > 0) {
-    $check->close();
-    jsonResponse(false, '用户名已存在');
+// 4. 查重（账号互通：全局查重，不区分来源，精准提示）
+try {
+    $u = $db->fetchOne("SELECT id FROM users WHERE username = ? LIMIT 1", [$username]);
+    if ($u) {
+        echo json_encode(['success' => false, 'message' => '用户名已存在'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    if ($email !== '') {
+        $e = $db->fetchOne("SELECT id FROM users WHERE email = ? LIMIT 1", [$email]);
+        if ($e) {
+            echo json_encode(['success' => false, 'message' => '邮箱已存在'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+    }
+    if ($phone !== '') {
+        $p = $db->fetchOne("SELECT id FROM users WHERE phone = ? LIMIT 1", [$phone]);
+        if ($p) {
+            echo json_encode(['success' => false, 'message' => '手机号已存在'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+    }
+} catch (Exception $e) {
+    // 忽略
 }
-$check->close();
 
-$hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+// 5. 写入用户（固定 source = 'app'）
+$hash = password_hash($password, PASSWORD_DEFAULT);
+try {
+    $db->query(
+        "INSERT INTO users (username, password, email, phone, register_source, status, created_at) VALUES (?, ?, ?, ?, 'app', 1, NOW())",
+        [$username, $hash, $email, $phone]
+    );
+    $userId = (int)$db->fetchOne("SELECT LAST_INSERT_ID() as c")['c'];
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'message' => '写入数据库失败: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+$token = sha1($userId . '|' . $username . '|' . microtime(true) . '|' . rand(1000, 9999));
 
-$stmt = $db->prepare('INSERT INTO users (username, password, email) VALUES (?, ?, ?)');
-$stmt->bind_param('sss', $username, $hashedPassword, $email);
+// 把 token 写回 users，方便 app_info.php 反查用户ID（single 类消息精准分发）
+try {
+    $db->query("UPDATE users SET token = ? WHERE id = ?", [$token, $userId]);
+} catch (Exception $e) {
+    try {
+        $col = $db->fetchOne("SHOW COLUMNS FROM `users` LIKE 'token'");
+        if (empty($col)) {
+            $db->query("ALTER TABLE `users` ADD COLUMN `token` VARCHAR(128) DEFAULT NULL COMMENT '会话Token' AFTER `status`");
+        }
+        $db->query("UPDATE users SET token = ? WHERE id = ?", [$token, $userId]);
+    } catch (Exception $_) {}
+}
 
-if ($stmt->execute()) {
-    $userId = $db->insert_id;
-    $token = generateToken($userId);
-    jsonResponse(true, '注册成功', [
-        'user_id' => $userId,
+echo json_encode([
+    'success' => true,
+    'message' => '注册成功',
+    'data' => [
+        'user_id'  => $userId,
         'username' => $username,
-        'token' => $token
-    ]);
-} else {
-    jsonResponse(false, '注册失败: ' . $stmt->error);
-}
-
-$stmt->close();
-$db->close();
+        'email'    => $email,
+        'token'    => $token,
+        'source'   => 'app',
+    ],
+    'user' => [
+        'user_id'  => $userId,
+        'username' => $username,
+        'email'    => $email,
+        'token'    => $token,
+        'source'   => 'app',
+    ],
+], JSON_UNESCAPED_UNICODE);
