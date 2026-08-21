@@ -40,13 +40,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.Folder
@@ -58,6 +62,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -94,6 +99,7 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
     var showTypePicker by remember { mutableStateOf(false) }
     var showAlertPicker by remember { mutableStateOf(false) }
     var showManagePage by remember { mutableStateOf(false) }
+    var showScannerPage by remember { mutableStateOf(false) }
 
     var showMessageDialog by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -140,7 +146,7 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
             when (activeTab) {
                 "home" -> HomeTab(
                     viewModel = viewModel,
-                    onScannerClick = { viewModel.navigateTo(com.scanrobot.app.viewmodel.Screen.Scanner) }
+                    onScannerClick = { showScannerPage = true }
                 )
                 "livecode" -> LiveCodeTab()
                 "workbench" -> WorkbenchTab(
@@ -427,6 +433,20 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
             }
         }
     }
+
+    // 全屏扫码机器人页面
+    if (showScannerPage) {
+        Dialog(
+            onDismissRequest = { showScannerPage = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            ScannerPage(
+                viewModel = viewModel,
+                onDismiss = { showScannerPage = false },
+                onManageClick = { showManagePage = true }
+            )
+        }
+    }
 }
 
 @Composable
@@ -606,33 +626,33 @@ private fun HomeTab(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             QuickEntry(
-                icon = "扫",
+                icon = Icons.Filled.CenterFocusStrong,
                 label = "扫码机器人",
-                bgColor = BluePrimary,
+                gradientColors = listOf(Color(0xFF1677ff), Color(0xFF4096ff)),
                 onClick = onScannerClick
             )
             QuickEntry(
-                icon = "图",
+                icon = Icons.Filled.Image,
                 label = "图片二维码",
-                bgColor = Color(0xFFFF9800),
+                gradientColors = listOf(Color(0xFFff7d00), Color(0xFFffa940)),
                 onClick = { selectedQrTab = "图片" }
             )
             QuickEntry(
-                icon = "视",
+                icon = Icons.Filled.Videocam,
                 label = "视频二维码",
-                bgColor = Color(0xFFE53935),
+                gradientColors = listOf(Color(0xFFff4d4f), Color(0xFFff7a45)),
                 onClick = { selectedQrTab = "视频" }
             )
             QuickEntry(
-                icon = "音",
+                icon = Icons.Filled.Mic,
                 label = "语音二维码",
-                bgColor = Color(0xFF43A047),
+                gradientColors = listOf(Color(0xFF52c41a), Color(0xFF95de64)),
                 onClick = { selectedQrTab = "音频" }
             )
             QuickEntry(
-                icon = "美",
+                icon = Icons.Filled.AutoAwesome,
                 label = "二维码美化",
-                bgColor = Color(0xFFEC407A),
+                gradientColors = listOf(Color(0xFFeb2f96), Color(0xFFff85c0)),
                 onClick = { viewModel.showToast("二维码美化功能开发中") }
             )
         }
@@ -948,9 +968,9 @@ private fun HomeTab(
 
 @Composable
 private fun QuickEntry(
-    icon: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    bgColor: Color,
+    gradientColors: List<Color>,
     onClick: () -> Unit
 ) {
     Column(
@@ -959,14 +979,24 @@ private fun QuickEntry(
     ) {
         Box(
             modifier = Modifier
-                .size(52.dp)
+                .size(56.dp)
+                .shadow(
+                    elevation = 8.dp,
+                    shape = CircleShape,
+                    spotColor = gradientColors.first().copy(alpha = 0.4f)
+                )
                 .clip(CircleShape)
-                .background(bgColor),
+                .background(Brush.horizontalGradient(gradientColors)),
             contentAlignment = Alignment.Center
         ) {
-            Text(icon, fontSize = 20.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = Color.White,
+                modifier = Modifier.size(28.dp)
+            )
         }
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(label, fontSize = 11.sp, color = TextPrimary, maxLines = 1)
     }
 }
@@ -1132,6 +1162,191 @@ private fun WorkbenchTab(
         ) {
             Text("开始扫码", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         }
+    }
+}
+
+@Composable
+private fun ScannerPage(
+    viewModel: ScanViewModel,
+    onDismiss: () -> Unit,
+    onManageClick: () -> Unit
+) {
+    val settings by viewModel.settings.collectAsState()
+    var showModePicker by remember { mutableStateOf(false) }
+    var showTypePicker by remember { mutableStateOf(false) }
+    var showAlertPicker by remember { mutableStateOf(false) }
+    var showDuplicateHelp by remember { mutableStateOf(false) }
+    var showPhotoHelp by remember { mutableStateOf(false) }
+
+    if (showDuplicateHelp) {
+        HelpDialog(
+            title = "允许二维码重复录入",
+            bullets = listOf(
+                "开启时，扫描已在扫描列表中的二维码不会提示重复，可再次录入；",
+                "关闭时，则会对列表中已存在的二维码进行提示重复，不允许录入。"
+            ),
+            onDismiss = { showDuplicateHelp = false }
+        )
+    }
+
+    if (showPhotoHelp) {
+        HelpDialog(
+            title = "自动保存扫码照片",
+            paragraphs = listOf(
+                Pair("开启后，扫码后将自动拍照。为保证照片清晰，", false),
+                Pair("建议使用半屏连扫或全屏连扫，微信原生扫码无法确保照片的清晰度。", true),
+                Pair("所有保存的扫码照片均支持批量导出。", false)
+            ),
+            onDismiss = { showPhotoHelp = false }
+        )
+    }
+
+    Scaffold(
+        containerColor = BgLight,
+        topBar = {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = BgWhite,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .clickable { onDismiss() }
+                            .background(Color(0xFFF5F5F5)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("←", fontSize = 18.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("扫码机器人", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                }
+            }
+        }
+    ) { padding ->
+        Box(modifier = Modifier.padding(padding)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                // 管理按钮卡片
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onManageClick() },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = BgWhite),
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(BluePrimary.copy(alpha = 0.1f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Filled.Folder,
+                                    contentDescription = null,
+                                    tint = BluePrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("批次管理", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("查看所有扫码批次", fontSize = 13.sp, color = TextSecondary)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            ChevronRight()
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = BgWhite),
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
+                ) {
+                    Column {
+                        SettingRowClick("扫码模式", modeText(settings.scanMode)) { showModePicker = true }
+                        SettingRowToggle("允许二维码重复录入", settings.allowDuplicate, { showDuplicateHelp = true }) {
+                            viewModel.toggleDuplicate()
+                        }
+                        SettingRowToggle("自动保存扫码照片", settings.autoSavePhoto, { showPhotoHelp = true }) {
+                            viewModel.togglePhoto()
+                        }
+                        SettingRowClick("扫码类型", typeText(settings.scanType)) { showTypePicker = true }
+                        SettingRowClick("扫码提示音", alertText(settings.alertType)) { showAlertPicker = true }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                Button(
+                    onClick = { viewModel.navigateTo(com.scanrobot.app.viewmodel.Screen.Scanner) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                ) {
+                    Text("开始扫码", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+
+    if (showModePicker) {
+        ScanModePickerSheet(
+            currentMode = settings.scanMode,
+            onDismiss = { showModePicker = false },
+            onSelect = { value ->
+                viewModel.setScanMode(value)
+                showModePicker = false
+            }
+        )
+    }
+
+    if (showTypePicker) {
+        SimplePickerSheet(
+            title = "选择扫码类型",
+            options = listOf("条形码+二维码" to "all", "仅条形码" to "barcode", "仅二维码" to "qrcode"),
+            currentValue = settings.scanType,
+            onDismiss = { showTypePicker = false },
+            onSelect = { value ->
+                viewModel.setScanType(value)
+                showTypePicker = false
+            }
+        )
+    }
+
+    if (showAlertPicker) {
+        SimplePickerSheet(
+            title = "选择提示方式",
+            options = listOf("\"滴\"声" to "sound", "震动" to "vibrate", "无提示" to "none"),
+            currentValue = settings.alertType,
+            onDismiss = { showAlertPicker = false },
+            onSelect = { value ->
+                viewModel.setAlertType(value)
+                showAlertPicker = false
+            }
+        )
     }
 }
 

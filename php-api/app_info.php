@@ -11,6 +11,10 @@ function getSetting($key, $default = '') {
     try {
         $row = $db->fetchOne("SELECT setting_value FROM app_settings WHERE setting_key = ? LIMIT 1", [$key]);
         if ($row) return $row['setting_value'];
+        // 查询不到时自动插入默认值，确保设置项存在
+        try {
+            $db->query("INSERT INTO app_settings (setting_key, setting_value, created_at, updated_at) VALUES (?, ?, NOW(), NOW())", [$key, $default]);
+        } catch (Exception $insertEx) {}
     } catch (Exception $e) {}
     return $default;
 }
