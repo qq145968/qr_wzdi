@@ -82,14 +82,24 @@ class MainActivity : ComponentActivity() {
                     mutableStateOf(cached?.let { AppInfo.fromJsonString(it) })
                 }
 
-                LaunchedEffect(Unit, isLoggedIn) {
+                // 启动时立即加载一次 appInfo（未登录时也需要，用于滑动验证码等配置）
+                LaunchedEffect(Unit) {
+                    val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo(this@MainActivity) }
+                    if (info != null) {
+                        authAppInfo = info
+                        sharedPrefs.edit().putString("cached_app_info", info.toJsonString()).apply()
+                    }
+                }
+
+                // 登录后定时刷新 appInfo
+                LaunchedEffect(isLoggedIn) {
                     while (isLoggedIn) {
                         val info = withContext(Dispatchers.IO) { ApiClient.getAppInfo(this@MainActivity) }
                         if (info != null) {
                             authAppInfo = info
                             sharedPrefs.edit().putString("cached_app_info", info.toJsonString()).apply()
                             // 后台封禁/删除用户后强制退出
-                            if (info.authInvalid && isLoggedIn) {
+                            if (info.authInvalid) {
                                 sharedPrefs.edit()
                                     .remove("auth_token")
                                     .remove("auth_username")

@@ -41,8 +41,12 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Logout
@@ -100,6 +104,7 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
     var showAlertPicker by remember { mutableStateOf(false) }
     var showManagePage by remember { mutableStateOf(false) }
     var showScannerPage by remember { mutableStateOf(false) }
+    var pendingScanner by remember { mutableStateOf(false) }
 
     var showMessageDialog by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -132,6 +137,15 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
                     showUpdateDialog = true
                 }
             }
+        }
+    }
+
+    // 扫码页导航：Dialog关闭后再跳转，避免返回时回到Dialog
+    LaunchedEffect(pendingScanner, showScannerPage) {
+        if (pendingScanner && !showScannerPage) {
+            delay(50)
+            viewModel.navigateTo(com.scanrobot.app.viewmodel.Screen.Scanner)
+            pendingScanner = false
         }
     }
 
@@ -443,7 +457,11 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
             ScannerPage(
                 viewModel = viewModel,
                 onDismiss = { showScannerPage = false },
-                onManageClick = { showManagePage = true }
+                onManageClick = { showManagePage = true },
+                onStartScanner = {
+                    pendingScanner = true
+                    showScannerPage = false
+                }
             )
         }
     }
@@ -1048,6 +1066,98 @@ private fun LiveCodeTab() {
 }
 
 @Composable
+private fun StatCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    iconColor: Color,
+    iconBgColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = BgWhite),
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(iconBgColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = iconColor,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = value,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                color = TextSecondary
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkbenchListItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconColor: Color,
+    label: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(iconColor.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = iconColor,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = label,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            color = TextPrimary,
+            modifier = Modifier.weight(1f)
+        )
+        ChevronRight()
+    }
+}
+
+@Composable
 private fun WorkbenchTab(
     viewModel: ScanViewModel,
     onModePickerOpen: () -> Unit,
@@ -1055,35 +1165,68 @@ private fun WorkbenchTab(
     onAlertPickerOpen: () -> Unit,
     onManageClick: () -> Unit
 ) {
-    val settings by viewModel.settings.collectAsState()
-    var showDuplicateHelp by remember { mutableStateOf(false) }
-    var showPhotoHelp by remember { mutableStateOf(false) }
+    val batches by viewModel.batches.collectAsState()
+    val totalQrCodes = 0
+    val totalScans = batches.sumOf { it.items.size }
+    val totalForms = 0
+    val lastWeekScans = 0
 
-    if (showDuplicateHelp) {
-        HelpDialog(
-            title = "允许二维码重复录入",
-            bullets = listOf(
-                "开启时，扫描已在扫描列表中的二维码不会提示重复，可再次录入；",
-                "关闭时，则会对列表中已存在的二维码进行提示重复，不允许录入。"
-            ),
-            onDismiss = { showDuplicateHelp = false }
-        )
-    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        // 统计卡片网格 2x2
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            StatCard(
+                icon = Icons.Filled.QrCode,
+                label = "二维码总数",
+                value = totalQrCodes.toString(),
+                iconColor = Color(0xFF1677ff),
+                iconBgColor = Color(0xFF1677ff).copy(alpha = 0.1f),
+                modifier = Modifier.weight(1f)
+            )
+            StatCard(
+                icon = Icons.Filled.QrCodeScanner,
+                label = "总扫码次数",
+                value = totalScans.toString(),
+                iconColor = Color(0xFF52c41a),
+                iconBgColor = Color(0xFF52c41a).copy(alpha = 0.1f),
+                modifier = Modifier.weight(1f)
+            )
+        }
 
-    if (showPhotoHelp) {
-        HelpDialog(
-            title = "自动保存扫码照片",
-            paragraphs = listOf(
-                Pair("开启后，扫码后将自动拍照。为保证照片清晰，", false),
-                Pair("建议使用半屏连扫或全屏连扫，微信原生扫码无法确保照片的清晰度。", true),
-                Pair("所有保存的扫码照片均支持批量导出。", false)
-            ),
-            onDismiss = { showPhotoHelp = false }
-        )
-    }
+        Spacer(modifier = Modifier.height(12.dp))
 
-    Column(modifier = Modifier.padding(16.dp)) {
-        // 管理按钮卡片
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            StatCard(
+                icon = Icons.Filled.Description,
+                label = "表单总数",
+                value = totalForms.toString(),
+                iconColor = Color(0xFF1677ff),
+                iconBgColor = Color(0xFF1677ff).copy(alpha = 0.1f),
+                modifier = Modifier.weight(1f)
+            )
+            StatCard(
+                icon = Icons.Filled.QrCode,
+                label = "上周扫码次数",
+                value = lastWeekScans.toString(),
+                iconColor = Color(0xFFeb2f96),
+                iconBgColor = Color(0xFFeb2f96).copy(alpha = 0.1f),
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 批次管理卡片
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1127,6 +1270,7 @@ private fun WorkbenchTab(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 功能列表卡片
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
@@ -1134,29 +1278,46 @@ private fun WorkbenchTab(
             border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
         ) {
             Column {
-                SettingRowClick("扫码模式", modeText(settings.scanMode)) { onModePickerOpen() }
-                SettingRowToggle("允许二维码重复录入", settings.allowDuplicate, { showDuplicateHelp = true }) {
-                    viewModel.toggleDuplicate()
-                }
-                SettingRowToggle("自动保存扫码照片", settings.autoSavePhoto, { showPhotoHelp = true }) {
-                    viewModel.togglePhoto()
-                }
-                SettingRowClick("扫码类型", typeText(settings.scanType)) { onTypePickerOpen() }
-                SettingRowClick("扫码提示音", alertText(settings.alertType)) { onAlertPickerOpen() }
+                WorkbenchListItem(
+                    icon = Icons.Filled.GridView,
+                    iconColor = Color(0xFF1677ff),
+                    label = "二维码管理",
+                    onClick = { viewModel.showToast("功能开发中") }
+                )
+                Divider(
+                    modifier = Modifier.padding(start = 56.dp),
+                    thickness = 0.5.dp,
+                    color = Color(0xFFF0F0F0)
+                )
+                WorkbenchListItem(
+                    icon = Icons.Filled.Analytics,
+                    iconColor = Color(0xFF1677ff),
+                    label = "扫码统计",
+                    onClick = { viewModel.showToast("功能开发中") }
+                )
+                Divider(
+                    modifier = Modifier.padding(start = 56.dp),
+                    thickness = 0.5.dp,
+                    color = Color(0xFFF0F0F0)
+                )
+                WorkbenchListItem(
+                    icon = Icons.Filled.Description,
+                    iconColor = Color(0xFF1677ff),
+                    label = "表单数据",
+                    onClick = { viewModel.showToast("功能开发中") }
+                )
+                Divider(
+                    modifier = Modifier.padding(start = 56.dp),
+                    thickness = 0.5.dp,
+                    color = Color(0xFFF0F0F0)
+                )
+                WorkbenchListItem(
+                    icon = Icons.Filled.Extension,
+                    iconColor = Color(0xFFfa8c16),
+                    label = "功能和用量",
+                    onClick = { viewModel.showToast("功能开发中") }
+                )
             }
-        }
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        Button(
-            onClick = { viewModel.navigateTo(com.scanrobot.app.viewmodel.Screen.Scanner) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
-        ) {
-            Text("开始扫码", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -1165,7 +1326,8 @@ private fun WorkbenchTab(
 private fun ScannerPage(
     viewModel: ScanViewModel,
     onDismiss: () -> Unit,
-    onManageClick: () -> Unit
+    onManageClick: () -> Unit,
+    onStartScanner: () -> Unit = {}
 ) {
     val settings by viewModel.settings.collectAsState()
     var showModePicker by remember { mutableStateOf(false) }
@@ -1295,7 +1457,7 @@ private fun ScannerPage(
                 Spacer(modifier = Modifier.height(28.dp))
 
                 Button(
-                    onClick = { viewModel.navigateTo(com.scanrobot.app.viewmodel.Screen.Scanner) },
+                    onClick = { onStartScanner() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp),
