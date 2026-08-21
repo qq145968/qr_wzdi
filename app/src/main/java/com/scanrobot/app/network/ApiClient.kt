@@ -148,6 +148,7 @@ object ApiClient {
                 announcement = data.optString("announcement", "欢迎使用扫码机器人"),
                 maintenanceMode = data.optBoolean("maintenance_mode", false),
                 registrationRequired = data.optBoolean("registration_required", true),
+                authInvalid = data.optBoolean("auth_invalid", false),
                 captchaEnabled = legacyCaptcha || captchaLoginEnabled || captchaRegisterEnabled,
                 captchaLoginEnabled = captchaLoginEnabled,
                 captchaRegisterEnabled = captchaRegisterEnabled,

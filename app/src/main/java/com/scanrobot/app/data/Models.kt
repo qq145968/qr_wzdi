@@ -39,6 +39,7 @@ data class AppInfo(
     val announcement: String = "",
     val maintenanceMode: Boolean = false,
     val registrationRequired: Boolean = true,
+    val authInvalid: Boolean = false,
     /** 兼容旧版：任一验证码开启就为 true */
     val captchaEnabled: Boolean = false,
     /** 登录页是否开启图形验证码（新版拆分键）*/
@@ -70,6 +71,7 @@ data class AppInfo(
         json.put("announcement", announcement)
         json.put("maintenance_mode", maintenanceMode)
         json.put("registration_required", registrationRequired)
+        json.put("auth_invalid", authInvalid)
         json.put("captcha_enabled", captchaEnabled)
         json.put("captcha_login_enabled", captchaLoginEnabled)
         json.put("captcha_register_enabled", captchaRegisterEnabled)
@@ -108,6 +110,7 @@ data class AppInfo(
                     announcement = json.optString("announcement", ""),
                     maintenanceMode = json.optBoolean("maintenance_mode", false),
                     registrationRequired = json.optBoolean("registration_required", true),
+                    authInvalid = json.optBoolean("auth_invalid", false),
                     captchaEnabled = legacyCaptcha || loginCap || regCap,
                     captchaLoginEnabled = loginCap,
                     captchaRegisterEnabled = regCap,

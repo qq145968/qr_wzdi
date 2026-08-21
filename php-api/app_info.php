@@ -31,6 +31,27 @@ if (!empty($splashImage)) {
 $appName = getSetting('app_name', '扫码机器人');
 $appDescription = getSetting('app_description', '让手机变成扫码枪');
 
+// 检查用户是否存在（后台删除用户后，APP 端立即失效）
+$authInvalid = false;
+$userId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
+$token = $_GET['token'] ?? '';
+if ($userId > 0 && !empty($token)) {
+    $payload = verifyToken($token);
+    if ($payload && (int)$payload['user_id'] === $userId) {
+        $conn = getDb();
+        $checkStmt = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+        $checkStmt->bind_param('i', $userId);
+        $checkStmt->execute();
+        $checkStmt->store_result();
+        if ($checkStmt->num_rows === 0) {
+            $authInvalid = true;
+        }
+        $checkStmt->close();
+    } else {
+        $authInvalid = true;
+    }
+}
+
 $conn = getDb();
 
 // Get latest published version
@@ -63,6 +84,7 @@ if ($msgResult) {
 }
 
 jsonResponse(true, 'ok', [
+    'auth_invalid' => $authInvalid,
     'announcement' => $announcement,
     'maintenance_mode' => $maintenanceMode,
     'registration_required' => $registrationRequired,
