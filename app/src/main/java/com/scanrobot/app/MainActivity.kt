@@ -76,6 +76,7 @@ class MainActivity : ComponentActivity() {
                 var isLoggedIn by remember { mutableStateOf(savedToken != null) }
                 var lastBackPress by remember { mutableLongStateOf(0L) }
                 var showCrashDialog by remember { mutableStateOf(lastCrash != null) }
+                var showScannerPage by remember { mutableStateOf(false) }
                 // 启动时先读缓存，避免硬编码默认值一闪
                 var authAppInfo by remember {
                     val cached = sharedPrefs.getString("cached_app_info", null)
@@ -155,20 +156,24 @@ class MainActivity : ComponentActivity() {
                 }
 
                 BackHandler(enabled = isLoggedIn) {
-                    when (currentScreen) {
-                        is Screen.Scanner, is Screen.Detail -> {
-                            viewModel.goBack()
-                        }
-                        is Screen.Home -> {
-                            val now = System.currentTimeMillis()
-                            if (now - lastBackPress < 2000) {
-                                finish()
-                            } else {
-                                lastBackPress = now
-                                viewModel.showToast("再按一次退出应用")
+                    if (showScannerPage) {
+                        showScannerPage = false
+                    } else {
+                        when (currentScreen) {
+                            is Screen.Scanner, is Screen.Detail -> {
+                                viewModel.goBack()
                             }
+                            is Screen.Home -> {
+                                val now = System.currentTimeMillis()
+                                if (now - lastBackPress < 2000) {
+                                    finish()
+                                } else {
+                                    lastBackPress = now
+                                    viewModel.showToast("再按一次退出应用")
+                                }
+                            }
+                            else -> {}
                         }
-                        else -> {}
                     }
                 }
 
@@ -185,6 +190,8 @@ class MainActivity : ComponentActivity() {
                         when (val screen = currentScreen) {
                             is Screen.Home -> HomeScreen(
                                 viewModel = viewModel,
+                                showScannerPage = showScannerPage,
+                                onScannerPageChange = { showScannerPage = it },
                                 onLogout = {
                                     sharedPrefs.edit()
                                         .remove("auth_token")

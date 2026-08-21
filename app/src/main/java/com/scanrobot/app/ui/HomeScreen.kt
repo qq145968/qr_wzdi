@@ -13,6 +13,7 @@ import android.os.Process
 import androidx.core.content.FileProvider
 import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -97,14 +98,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
+fun HomeScreen(
+    viewModel: ScanViewModel,
+    showScannerPage: Boolean = false,
+    onScannerPageChange: (Boolean) -> Unit = {},
+    onLogout: () -> Unit = {}
+) {
     var activeTab by remember { mutableStateOf("home") }
     var showModePicker by remember { mutableStateOf(false) }
     var showTypePicker by remember { mutableStateOf(false) }
     var showAlertPicker by remember { mutableStateOf(false) }
     var showManagePage by remember { mutableStateOf(false) }
-    var showScannerPage by remember { mutableStateOf(false) }
-    var pendingScanner by remember { mutableStateOf(false) }
 
     var showMessageDialog by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -140,15 +144,6 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
         }
     }
 
-    // 扫码页导航：Dialog关闭后再跳转，避免返回时回到Dialog
-    LaunchedEffect(pendingScanner, showScannerPage) {
-        if (pendingScanner && !showScannerPage) {
-            delay(50)
-            viewModel.navigateTo(com.scanrobot.app.viewmodel.Screen.Scanner)
-            pendingScanner = false
-        }
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -160,7 +155,7 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
             when (activeTab) {
                 "home" -> HomeTab(
                     viewModel = viewModel,
-                    onScannerClick = { showScannerPage = true }
+                    onScannerClick = { onScannerPageChange(true) }
                 )
                 "livecode" -> LiveCodeTab()
                 "workbench" -> WorkbenchTab(
@@ -451,16 +446,15 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
     // 全屏扫码机器人页面
     if (showScannerPage) {
         Dialog(
-            onDismissRequest = { showScannerPage = false },
+            onDismissRequest = { onScannerPageChange(false) },
             properties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
             ScannerPage(
                 viewModel = viewModel,
-                onDismiss = { showScannerPage = false },
+                onDismiss = { onScannerPageChange(false) },
                 onManageClick = { showManagePage = true },
                 onStartScanner = {
-                    pendingScanner = true
-                    showScannerPage = false
+                    viewModel.navigateTo(com.scanrobot.app.viewmodel.Screen.Scanner)
                 }
             )
         }
@@ -1226,50 +1220,6 @@ private fun WorkbenchTab(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 批次管理卡片
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onManageClick() },
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = BgWhite),
-            border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(BluePrimary.copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Filled.Folder,
-                            contentDescription = null,
-                            tint = BluePrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text("批次管理", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("查看所有扫码批次", fontSize = 13.sp, color = TextSecondary)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    ChevronRight()
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
         // 功能列表卡片
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -1335,6 +1285,8 @@ private fun ScannerPage(
     var showAlertPicker by remember { mutableStateOf(false) }
     var showDuplicateHelp by remember { mutableStateOf(false) }
     var showPhotoHelp by remember { mutableStateOf(false) }
+
+    BackHandler { onDismiss() }
 
     if (showDuplicateHelp) {
         HelpDialog(
