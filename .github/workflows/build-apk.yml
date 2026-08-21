@@ -29,6 +29,29 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
+    - name: Replace maven mirrors for GitHub CI
+      run: |
+        cat > settings.gradle.kts << 'EOF'
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+
+        dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+
+        rootProject.name = "ScanRobot"
+        include(":app")
+        EOF
+
     - name: Build Release APK
       env:
         JAVA_OPTS: "-Xmx4096m -XX:MaxMetaspaceSize=512m"
