@@ -37,14 +37,24 @@ $slidingLoginEnabled    = getSetting('sliding_login_enabled', '1') === '1';
 $slidingRegisterEnabled = getSetting('sliding_register_enabled', '1') === '1';
 $slidingForgotEnabled   = getSetting('sliding_forgot_enabled', '1') === '1';
 
-// —— 检查用户是否存在（后台删除用户后，APP 端立即失效）——
+// —— 检查用户是否存在且未禁用（后台删除/禁用用户后，APP 端立即失效）——
 $authInvalid = false;
 $reqUserId = (int)($_GET['user_id'] ?? $_POST['user_id'] ?? 0);
 $authToken = trim($_GET['token'] ?? $_POST['token'] ?? '');
 if ($reqUserId > 0) {
     try {
-        $userRow = $db->fetchOne("SELECT id, token FROM users WHERE id = ? LIMIT 1", [$reqUserId]);
-        if (!$userRow) {
+        // 先检查封禁是否过期，过期则自动解封
+        $banRow = $db->fetchOne("SELECT id, status, banned_until FROM users WHERE id = ? LIMIT 1", [$reqUserId]);
+        if (!$banRow) {
+            $authInvalid = true;
+        } elseif ((int)$banRow['status'] === 0 && !empty($banRow['banned_until'])) {
+            $expireRow = $db->fetchOne("SELECT TIMESTAMPDIFF(SECOND, NOW(), ?) as diff", [$banRow['banned_until']]);
+            if ($expireRow && (int)$expireRow['diff'] <= 0) {
+                $db->update('users', ['status' => 1, 'banned_at' => null, 'banned_until' => null], ['id' => $reqUserId]);
+                $banRow['status'] = 1;
+            }
+        }
+        if (!$authInvalid && (int)$banRow['status'] !== 1) {
             $authInvalid = true;
         }
     } catch (Exception $e) {

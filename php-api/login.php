@@ -71,7 +71,7 @@ if ($captchaEnabled) {
 
 // 登录验证
 try {
-    $found = $db->fetchOne("SELECT id, username, password, email, phone, avatar, avatarUrl, status, register_source, login_count FROM users WHERE (username = ? OR email = ?) AND register_source = 'app' LIMIT 1", [$username, $username]);
+    $found = $db->fetchOne("SELECT id, username, password, email, phone, avatar, avatarUrl, status, banned_until, register_source, login_count FROM users WHERE (username = ? OR email = ?) AND register_source = 'app' LIMIT 1", [$username, $username]);
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => '数据库错误: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
     exit;
@@ -100,8 +100,24 @@ if (!$found || !password_verify($password, $found['password'])) {
     exit;
 }
 if ((int)$found['status'] !== 1) {
-    echo json_encode(['success' => false, 'message' => '账号已被禁用，请联系管理员'], JSON_UNESCAPED_UNICODE);
-    exit;
+    // 检查封禁是否已过期（banned_until 不为空且已过期 → 自动解封）
+    if (!empty($found['banned_until'])) {
+        try {
+            $banExpireRow = $db->fetchOne("SELECT TIMESTAMPDIFF(SECOND, NOW(), ?) as diff", [$found['banned_until']]);
+            if ($banExpireRow && (int)$banExpireRow['diff'] <= 0) {
+                // 封禁已过期，自动解封
+                $db->update('users', ['status' => 1, 'banned_at' => null, 'banned_until' => null], ['id' => $found['id']]);
+                $found['status'] = 1;
+            }
+        } catch (Exception $e) {
+            // 忽略
+        }
+    }
+    if ((int)$found['status'] !== 1) {
+        $banMsg = !empty($found['banned_until']) ? '账号已被禁用，到期时间：' . $found['banned_until'] : '账号已被永久禁用，请联系管理员';
+        echo json_encode(['success' => false, 'message' => $banMsg], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 }
 
 // 生成简单 token

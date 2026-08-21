@@ -198,7 +198,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
                                         }
                                     } catch (e: Throwable) {
                                         Log.e("AuthScreen", "Login exception", e)
-                                        message = "登录失败: ${e.message ?: "未知错误"}"; messageIsError = true
+                                        message = "网络错误"; messageIsError = true
                                     } finally {
                                         isLoading = false
                                     }
@@ -239,7 +239,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
                                     }
                                 } catch (e: Throwable) {
                                     Log.e("AuthScreen", "Login exception", e)
-                                    message = "登录失败: ${e.message ?: "未知错误"}"; messageIsError = true
+                                    message = "网络错误"; messageIsError = true
                                 } finally {
                                     isLoading = false
                                 }
@@ -307,7 +307,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
                                             }
                                         } catch (e: Throwable) {
                                             Log.e("AuthScreen", "Register exception", e)
-                                            message = "注册失败: ${e.message ?: "未知错误"}"; messageIsError = true
+                                            message = "网络错误"; messageIsError = true
                                         } finally {
                                             isLoading = false
                                         }
@@ -346,7 +346,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
                                     messageIsError = !result.success
                                 } catch (e: Throwable) {
                                     Log.e("AuthScreen", "ForgotPassword exception", e)
-                                    message = "发送失败: ${e.message ?: "未知错误"}"; messageIsError = true
+                                    message = "网络错误"; messageIsError = true
                                 } finally {
                                     isLoading = false
                                 }
@@ -376,7 +376,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit, appInfo: AppInfo? = null) {
                                             }
                                         } catch (e: Throwable) {
                                             Log.e("AuthScreen", "ResetPassword exception", e)
-                                            message = "重置失败: ${e.message ?: "未知错误"}"; messageIsError = true
+                                            message = "网络错误"; messageIsError = true
                                         } finally {
                                             isLoading = false
                                         }

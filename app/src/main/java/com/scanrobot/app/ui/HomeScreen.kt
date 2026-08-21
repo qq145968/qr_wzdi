@@ -30,6 +30,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -38,14 +39,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.QrCode
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -82,10 +89,11 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
-    var activeTab by remember { mutableStateOf("scan") }
+    var activeTab by remember { mutableStateOf("home") }
     var showModePicker by remember { mutableStateOf(false) }
     var showTypePicker by remember { mutableStateOf(false) }
     var showAlertPicker by remember { mutableStateOf(false) }
+    var showManagePage by remember { mutableStateOf(false) }
 
     var showMessageDialog by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -130,13 +138,18 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
 
         Box(modifier = Modifier.weight(1f)) {
             when (activeTab) {
-                "scan" -> ScanTab(
+                "home" -> HomeTab(
+                    viewModel = viewModel,
+                    onScannerClick = { viewModel.navigateTo(com.scanrobot.app.viewmodel.Screen.Scanner) }
+                )
+                "livecode" -> LiveCodeTab()
+                "workbench" -> WorkbenchTab(
                     viewModel = viewModel,
                     onModePickerOpen = { showModePicker = true },
                     onTypePickerOpen = { showTypePicker = true },
-                    onAlertPickerOpen = { showAlertPicker = true }
+                    onAlertPickerOpen = { showAlertPicker = true },
+                    onManageClick = { showManagePage = true }
                 )
-                "manage" -> ManageTab(viewModel)
                 "profile" -> ProfileTab(
                     viewModel = viewModel,
                     appInfo = appInfo,
@@ -371,6 +384,49 @@ fun HomeScreen(viewModel: ScanViewModel, onLogout: () -> Unit = {}) {
             }
         }
     }
+
+    // 全屏管理页面
+    if (showManagePage) {
+        Dialog(
+            onDismissRequest = { showManagePage = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Scaffold(
+                containerColor = BgLight,
+                topBar = {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = BgWhite,
+                        shadowElevation = 4.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .clickable { showManagePage = false }
+                                    .background(Color(0xFFF5F5F5)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("←", fontSize = 18.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("批次管理", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        }
+                    }
+                }
+            ) { padding ->
+                Box(modifier = Modifier.padding(padding)) {
+                    ManageTab(viewModel)
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -489,13 +545,16 @@ private fun BottomNavBar(active: String, onSwitch: (String) -> Unit) {
                 .padding(vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            NavItem("扫码", active == "scan",
-                if (active == "scan") Icons.Filled.CenterFocusStrong else Icons.Outlined.CenterFocusStrong
-            ) { onSwitch("scan") }
-            NavItem("管理", active == "manage",
-                if (active == "manage") Icons.Filled.Folder else Icons.Outlined.Folder
-            ) { onSwitch("manage") }
-            NavItem("个人中心", active == "profile",
+            NavItem("首页", active == "home",
+                if (active == "home") Icons.Filled.Home else Icons.Outlined.Home
+            ) { onSwitch("home") }
+            NavItem("生成活码", active == "livecode",
+                if (active == "livecode") Icons.Filled.QrCode else Icons.Outlined.QrCode
+            ) { onSwitch("livecode") }
+            NavItem("工作台", active == "workbench",
+                if (active == "workbench") Icons.Filled.Analytics else Icons.Outlined.Analytics
+            ) { onSwitch("workbench") }
+            NavItem("我的", active == "profile",
                 if (active == "profile") Icons.Filled.Person else Icons.Outlined.Person
             ) { onSwitch("profile") }
         }
@@ -527,11 +586,448 @@ private fun NavItem(label: String, active: Boolean, icon: androidx.compose.ui.gr
 }
 
 @Composable
-private fun ScanTab(
+private fun HomeTab(
+    viewModel: ScanViewModel,
+    onScannerClick: () -> Unit = {}
+) {
+    val qrTabs = listOf("文本", "解码", "文档", "图片", "音频", "视频", "网址")
+    var selectedQrTab by remember { mutableStateOf("文本") }
+    var textContent by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        // 5个圆形功能入口
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            QuickEntry(
+                icon = "扫",
+                label = "扫码机器人",
+                bgColor = BluePrimary,
+                onClick = onScannerClick
+            )
+            QuickEntry(
+                icon = "图",
+                label = "图片二维码",
+                bgColor = Color(0xFFFF9800),
+                onClick = { selectedQrTab = "图片" }
+            )
+            QuickEntry(
+                icon = "视",
+                label = "视频二维码",
+                bgColor = Color(0xFFE53935),
+                onClick = { selectedQrTab = "视频" }
+            )
+            QuickEntry(
+                icon = "音",
+                label = "语音二维码",
+                bgColor = Color(0xFF43A047),
+                onClick = { selectedQrTab = "音频" }
+            )
+            QuickEntry(
+                icon = "美",
+                label = "二维码美化",
+                bgColor = Color(0xFFEC407A),
+                onClick = { viewModel.showToast("二维码美化功能开发中") }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // 横向滚动 Tab
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = BgWhite)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                qrTabs.forEach { tab ->
+                    Box(
+                        modifier = Modifier
+                            .clickable { selectedQrTab = tab }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                tab,
+                                fontSize = 14.sp,
+                                color = if (selectedQrTab == tab) BluePrimary else TextSecondary,
+                                fontWeight = if (selectedQrTab == tab) FontWeight.SemiBold else FontWeight.Normal
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            if (selectedQrTab == tab) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(20.dp)
+                                        .height(3.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(BluePrimary)
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.height(3.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 内容输入区卡片
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = BgWhite),
+            border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                when (selectedQrTab) {
+                    "文本" -> {
+                        Text("文本内容", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = textContent,
+                            onValueChange = { textContent = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BgLight)
+                                .padding(12.dp),
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                fontSize = 14.sp,
+                                color = TextPrimary
+                            ),
+                            decorationBox = { innerTextField ->
+                                if (textContent.isEmpty()) {
+                                    Text("请在此输入需要生成二维码的文字", fontSize = 14.sp, color = Color(0xFFBBBBBB))
+                                }
+                                innerTextField()
+                            }
+                        )
+                    }
+                    "解码" -> {
+                        Text("解码", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BgLight),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Filled.QrCode,
+                                    contentDescription = null,
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("上传二维码图片进行解码", fontSize = 13.sp, color = TextSecondary)
+                            }
+                        }
+                    }
+                    "文档" -> {
+                        Text("文档", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BgLight)
+                                .border(1.dp, BorderLight, RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("📄", fontSize = 32.sp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("点击上传文档文件", fontSize = 13.sp, color = TextSecondary)
+                            }
+                        }
+                    }
+                    "图片" -> {
+                        Text("图片", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BgLight)
+                                .border(1.dp, BorderLight, RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("🖼️", fontSize = 32.sp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("点击上传图片", fontSize = 13.sp, color = TextSecondary)
+                            }
+                        }
+                    }
+                    "音频" -> {
+                        Text("音频", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BgLight)
+                                .border(1.dp, BorderLight, RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("🎵", fontSize = 32.sp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("点击上传音频文件", fontSize = 13.sp, color = TextSecondary)
+                            }
+                        }
+                    }
+                    "视频" -> {
+                        Text("视频", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BgLight)
+                                .border(1.dp, BorderLight, RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("🎬", fontSize = 32.sp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("点击上传视频文件", fontSize = 13.sp, color = TextSecondary)
+                            }
+                        }
+                    }
+                    "网址" -> {
+                        Text("网址链接", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = textContent,
+                            onValueChange = { textContent = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BgLight)
+                                .padding(horizontal = 12.dp, vertical = 14.dp),
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                fontSize = 14.sp,
+                                color = TextPrimary
+                            ),
+                            singleLine = true,
+                            decorationBox = { innerTextField ->
+                                if (textContent.isEmpty()) {
+                                    Text("请输入网址链接", fontSize = 14.sp, color = Color(0xFFBBBBBB))
+                                }
+                                innerTextField()
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // 生成二维码按钮
+        Button(
+            onClick = { viewModel.showToast("生成二维码功能开发中") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+            contentPadding = PaddingValues(0.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(BluePrimary, Color(0xFF1565C0))
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "生成二维码",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // 底部两个并排卡片按钮
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { viewModel.showToast("新建空白表单功能开发中") },
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = BgWhite),
+                border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(BluePrimary.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("+", fontSize = 24.sp, color = BluePrimary, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("新建空白表单", fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
+                }
+            }
+
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { viewModel.showToast("AI生成表单功能开发中") },
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = BgWhite),
+                border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF7C4DFF).copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("✨", fontSize = 20.sp)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("AI生成表单", fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun QuickEntry(
+    icon: String,
+    label: String,
+    bgColor: Color,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(CircleShape)
+                .background(bgColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(icon, fontSize = 20.sp, color = Color.White, fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(label, fontSize = 11.sp, color = TextPrimary, maxLines = 1)
+    }
+}
+
+@Composable
+private fun LiveCodeTab() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(BluePrimary.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Filled.QrCode,
+                contentDescription = null,
+                tint = BluePrimary,
+                modifier = Modifier.size(56.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(
+            "生成活码功能",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextPrimary
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            "动态二维码，内容可随时修改，\n扫码次数实时统计，营销推广必备工具",
+            fontSize = 14.sp,
+            color = TextSecondary,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            lineHeight = 20.sp
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        Button(
+            onClick = {},
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+        ) {
+            Text("即将上线，敬请期待", color = Color.White, fontWeight = FontWeight.Medium, modifier = Modifier.padding(vertical = 4.dp))
+        }
+    }
+}
+
+@Composable
+private fun WorkbenchTab(
     viewModel: ScanViewModel,
     onModePickerOpen: () -> Unit,
     onTypePickerOpen: () -> Unit,
-    onAlertPickerOpen: () -> Unit
+    onAlertPickerOpen: () -> Unit,
+    onManageClick: () -> Unit
 ) {
     val settings by viewModel.settings.collectAsState()
     var showDuplicateHelp by remember { mutableStateOf(false) }
@@ -561,6 +1057,50 @@ private fun ScanTab(
     }
 
     Column(modifier = Modifier.padding(16.dp)) {
+        // 管理按钮卡片
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onManageClick() },
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = BgWhite),
+            border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderLight)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(BluePrimary.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Filled.Folder,
+                            contentDescription = null,
+                            tint = BluePrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("批次管理", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("查看所有扫码批次", fontSize = 13.sp, color = TextSecondary)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    ChevronRight()
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
@@ -1081,7 +1621,7 @@ private fun VersionUpdateDialog(version: VersionInfo, onDismiss: () -> Unit) {
             }
             context.startActivity(installIntent)
         } catch (e: Throwable) {
-            statusMessage = "安装失败: ${e.message}"
+            statusMessage = "安装失败"
             downloadState = "failed"
         }
     }
@@ -1171,7 +1711,7 @@ private fun VersionUpdateDialog(version: VersionInfo, onDismiss: () -> Unit) {
             downloadProgress = 0
             statusMessage = ""
         } catch (e: Throwable) {
-            statusMessage = "下载失败: ${e.message}"
+            statusMessage = "下载失败"
             downloadState = "failed"
         }
     }

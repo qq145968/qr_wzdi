@@ -266,7 +266,7 @@ object ApiClient {
                 username = pickString("username")
             )
         } catch (e: Throwable) {
-            ApiResult(success = false, message = "网络错误: ${e.message ?: "未知错误"}")
+            ApiResult(success = false, message = "网络错误")
         }
     }
 }
